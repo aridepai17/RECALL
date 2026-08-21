@@ -1,0 +1,38 @@
+name: Recall CI Pipeline
+
+on:
+    push:
+        branches: ['master']
+    pull_request:
+        branches: ['master']
+
+jobs:
+    build-and-verify:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@v4
+
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: latest
+
+            - name: Install Dependencies
+              run: bun install --frozen-lockfile
+
+            - name: Generate Routes
+              if: ${{ hashFiles('src/routes/**') != '' }}
+              run: bunx @tanstack/router-cli generate
+
+            - name: Type Check
+              if: ${{ hashFiles('src/**') != '' }}
+              run: bun run typecheck
+
+            - name: Lint
+              run: bun run lint
+
+            - name: Production Build
+              if: ${{ hashFiles('index.html') != '' && hashFiles('src/**') != '' }}
+              run: bun run build
