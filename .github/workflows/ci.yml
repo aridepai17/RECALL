@@ -9,12 +9,13 @@ on:
 jobs:
     build-and-verify:
         runs-on: ubuntu-latest
+
         steps:
             - name: Checkout Code
               uses: actions/checkout@v4
 
             - name: Setup Bun
-              uses: oven-sh/setup-bun@v1
+              uses: oven-sh/setup-bun@v2
               with:
                   bun-version: latest
 
@@ -22,6 +23,7 @@ jobs:
               run: bun install --frozen-lockfile
 
             - name: Generate Routes
+              if: ${{ hashFiles('src/routes/**') != '' }}
               run: bunx @tanstack/router-cli generate
 
             - name: Type Check
@@ -31,4 +33,5 @@ jobs:
               run: bun run lint
 
             - name: Production Build
+              if: ${{ hashFiles('index.html') != '' && hashFiles('src/**') != '' }}
               run: bun run build
