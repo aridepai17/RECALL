@@ -27,6 +27,7 @@ jobs:
               run: bunx @tanstack/router-cli generate
 
             - name: Type Check
+              if: ${{ hashFiles('src/**') != '' }}
               run: bun run typecheck
 
             - name: Lint
