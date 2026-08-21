@@ -1,0 +1,50 @@
+{
+    "name": "recall",
+    "module": "index.ts",
+    "type": "module",
+    "private": true,
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@tailwindcss/vite": "^4.3.3",
+        "@tanstack/router-cli": "^1.167.32",
+        "@tanstack/router-vite-plugin": "^1.167.34",
+        "@types/bun": "latest",
+        "@types/node": "^26.2.0",
+        "@types/react": "^19.2.18",
+        "@types/react-dom": "^19.2.4",
+        "@typescript-eslint/eslint-plugin": "^8.67.0",
+        "@typescript-eslint/parser": "^8.67.0",
+        "@vitejs/plugin-react": "^6.1.0",
+        "eslint": "^10.9.0",
+        "eslint-plugin-react-hooks": "^7.1.1",
+        "eslint-plugin-react-refresh": "^0.5.4",
+        "globals": "^17.11.0",
+        "husky": "^9.1.7",
+        "lint-staged": "^17.3.0",
+        "prettier": "^3.9.6",
+        "tailwindcss": "^4.3.3",
+        "typescript": "^5.9.3",
+        "vite": "^8.2.2"
+    },
+    "dependencies": {
+        "@tanstack/react-query": "^5.101.4",
+        "@tanstack/react-router": "^1.170.31",
+        "@tanstack/start": "^1.120.20",
+        "clsx": "^2.1.1",
+        "lucide-react": "^1.33.0",
+        "motion": "^13.1.1",
+        "react": "^19.2.8",
+        "react-dom": "^19.2.8",
+        "tailwind-merge": "^3.6.0",
+        "zod": "^4.4.3"
+    },
+    "scripts": {
+        "dev": "vite",
+        "build": "tsr generate && tsc --noEmit && vite build",
+        "preview": "vite preview",
+        "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+        "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+        "prepare": "husky",
+        "typecheck": "tsc --noEmit"
+    }
+}
