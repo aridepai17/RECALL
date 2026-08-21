@@ -40,7 +40,7 @@
     },
     "scripts": {
         "dev": "vite",
-        "build": "tsr generate && tsc --noEmit && vite build",
+        "build": "tsc --noEmit && vite build",
         "preview": "vite preview",
         "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
         "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
