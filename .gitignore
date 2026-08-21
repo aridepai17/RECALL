@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+*.tgz
+
+# Logs
+logs/
+*.log
+
+# Coverage
+coverage/
+*.lcov
+
+# Environment variables
+.env
+.env.*.local
+
+# Caches
+.eslintcache
+.cache/
+*.tsbuildinfo
+
+# IDEs
+.idea/
+
+# macOS
+.DS_Store
