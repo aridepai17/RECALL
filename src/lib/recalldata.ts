@@ -1,4 +1,3 @@
-/* eslint-disable no-undef */
 import { z } from 'zod';
 import { type Grade, type HistoryEntry, type Problem, type ScheduleResult, todayISO } from './srs';
 
