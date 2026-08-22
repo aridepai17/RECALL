@@ -19,6 +19,7 @@ export default [
             parser: tsParser,
             globals: {
                 ...globals.node,
+                ...globals.browser,
             },
             parserOptions: {
                 ecmaVersion: 'latest',
