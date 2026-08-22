@@ -61,6 +61,10 @@ export const problemsQuery = {
     queryFn: async (): Promise<Problem[]> => readList(PROBLEMS_KEY, ProblemSchema),
 };
 
+export async function loadProblems(): Promise<Problem[]> {
+    return readList(PROBLEMS_KEY, ProblemSchema);
+}
+
 export const historyQuery = {
     queryKey: ['problem_history'] as const,
     queryFn: async (): Promise<HistoryEntry[]> => readList(HISTORY_KEY, HistoryEntrySchema),
