@@ -31,7 +31,7 @@ export const Route = createFileRoute('/review')({
                 content:
                     'The Recall review engine: one card at a time, keyboard-first 0-3 grading, and a calm Queue Clear state when the day is done.',
             },
-            { property: 'og:title', content: 'Review — Recall' },
+            { property: 'og:title', content: 'Review - Recall' },
             {
                 property: 'og:description',
                 content: 'Keyboard-first active recall. One problem, right now.',
@@ -53,9 +53,9 @@ function ReviewEngine() {
     const [error, setError] = useState<string | null>(null);
     const [sessionSize, setSessionSize] = useState<number | null>(null);
 
-    // Keep 'today' fresh across midnight and reset session state on date change
+    // Keep 'today' fresh exactly at midnight, on focus, and check frequently for drift
     useEffect(() => {
-        const handleFocus = () => {
+        const checkRollover = () => {
             const currentIso = todayISO();
             setToday((prev) => {
                 if (prev !== currentIso) {
@@ -67,10 +67,30 @@ function ReviewEngine() {
                 return prev;
             });
         };
-        window.addEventListener('focus', handleFocus);
-        const interval = setInterval(handleFocus, 1000 * 60 * 15); // check every 15 mins
+
+        window.addEventListener('focus', checkRollover);
+
+        let timeoutId: ReturnType<typeof setTimeout>;
+        const scheduleMidnight = () => {
+            const now = new Date();
+            const msUntilMidnight =
+                new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() -
+                now.getTime();
+
+            // Add 1s buffer to ensure local time has cleanly crossed the threshold
+            timeoutId = setTimeout(() => {
+                checkRollover();
+                scheduleMidnight();
+            }, msUntilMidnight + 1000);
+        };
+        scheduleMidnight();
+
+        // 1-minute fallback interval for system sleep/wake drift if focus doesn't trigger
+        const interval = setInterval(checkRollover, 1000 * 60);
+
         return () => {
-            window.removeEventListener('focus', handleFocus);
+            window.removeEventListener('focus', checkRollover);
+            clearTimeout(timeoutId);
             clearInterval(interval);
         };
     }, []);
@@ -96,7 +116,6 @@ function ReviewEngine() {
         mutationFn: async ({ problem, gradeValue }: { problem: Problem; gradeValue: Grade }) => {
             const activeToday = todayISO();
             const next = scheduleNextReview(problem, gradeValue, activeToday);
-
             await commitReview(problem, gradeValue, next, activeToday);
         },
         onMutate: async ({ problem }) => {
