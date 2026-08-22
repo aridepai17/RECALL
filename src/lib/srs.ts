@@ -244,6 +244,6 @@ export function formatDue(dueISO: string, today: string): string {
     const delta = daysBetween(today, dueISO);
     if (delta === 0) return 'today';
     if (delta === 1) return 'tomorrow';
-    if (delta < 0) return `${Math.abs(delta)} d overdue`;
-    return `in ${delta} d`;
+    if (delta < 0) return `${Math.abs(delta)} days overdue`;
+    return `in ${delta} days`;
 }

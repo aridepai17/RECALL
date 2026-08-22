@@ -1,0 +1,62 @@
+# Production-grade robots.txt for Recall Spaced Repetition App
+
+# Allow all robots
+User-agent: *
+
+# Disallow indexing of private/user-specific routes
+Disallow: /review
+Disallow: /library
+
+# Allow indexing of public informational content
+Allow: /
+
+# Crawl delay to prevent overloading the server
+Crawl-delay: 1
+
+# Sitemap (create one if you have dynamic content)
+# Sitemap: https://yourdomain.com/sitemap.xml
+
+# Block common bad bots
+User-agent: *
+Disallow: /cgi-bin/
+Disallow: /tmp/
+Disallow: /junk/
+
+# Allow major search engines specifically
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+# Block aggressive crawlers
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: MJ12bot
+Disallow: /
+
+# Block AI crawlers (optional, uncomment if needed)
+# User-agent: ChatGPT-User
+# Disallow: /
+
+# User-agent: GPTBot
+# Disallow: /
+
+# User-agent: Google-Extended
+# Disallow: /
+
+# User-agent: anthropic-ai
+# Disallow: /
+
+# User-agent: Claude-Web
+# Disallow: /
