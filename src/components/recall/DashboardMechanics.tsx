@@ -1,7 +1,7 @@
 import { useId, useRef, useState, type ReactNode } from 'react';
 import { motion, useMotionTemplate, useMotionValue } from 'motion/react';
 import { Terminal, Gauge, TrendingDown, Archive } from 'lucide-react';
-import { scheduleNextReview } from '@/lib/srs';
+import { scheduleNextReview, type Grade } from '@/lib/srs';
 import { cn } from '@/lib/utils';
 
 function SpotlightCard({
@@ -41,6 +41,7 @@ function SpotlightCard({
             className="group relative isolate overflow-hidden rounded-xl bg-surface/80 p-6 ring-1 ring-border backdrop-blur-md transition-all duration-300 ease-out hover:ring-white/20"
         >
             <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-white/[0.03] to-transparent" />
+
             <motion.div
                 style={{ background }}
                 className="pointer-events-none absolute inset-0 -z-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
@@ -50,8 +51,11 @@ function SpotlightCard({
                 <span className="metric text-[11px] tabular-nums text-muted-foreground">
                     {index}
                 </span>
+
                 <span className="text-foreground/60">{icon}</span>
+
                 <h2 className="metric text-[19px] tracking-tight text-foreground">{title}</h2>
+
                 <span className={cn('metric ml-auto text-[11px] tabular-nums', formulaTone)}>
                     {formula}
                 </span>
@@ -81,9 +85,10 @@ function BlankScreen() {
                 <pre className="metric px-3 py-3 text-[11px] leading-[1.7] text-muted-foreground">
                     <span className="text-foreground/80">function</span> twoSum(nums, target) {'{'}
                     <span
-                        className={`mt-0.5 block transition-all duration-300 select-none ${
-                            revealed ? 'blur-none' : 'blur-sm'
-                        }`}
+                        className={cn(
+                            'mt-0.5 block select-none transition-all duration-300',
+                            revealed ? 'blur-none' : 'blur-sm',
+                        )}
                     >
                         {
                             '  const seen = new Map();\n  for (let i = 0; i < nums.length; i++) {\n    const need = target - nums[i];\n    if (seen.has(need)) return [seen.get(need), i];\n    seen.set(nums[i], i);\n  }'
@@ -92,6 +97,7 @@ function BlankScreen() {
                     {'}'}
                 </pre>
             </button>
+
             <p className="metric mt-2 text-[11px] text-muted-foreground">
                 two-sum.ts — {revealed ? 'revealed' : 'tap to reveal'}
             </p>
@@ -106,32 +112,36 @@ const FRICTION_BASELINE = {
     lapses: 0,
 } as const;
 
-const FRICTION = [
-    {
-        key: '0' as const,
-        label: 'Trench',
-        interval: `${scheduleNextReview(FRICTION_BASELINE, 0, '2026-01-01').interval_days}d`,
-        cls: 'bg-lapsed/20 text-lapsed ring-lapsed/40',
-    },
-    {
-        key: '1' as const,
-        label: 'Grind',
-        interval: `${scheduleNextReview(FRICTION_BASELINE, 1, '2026-01-01').interval_days}d`,
-        cls: 'bg-white/10 text-foreground ring-border',
-    },
-    {
-        key: '2' as const,
-        label: 'Triumph',
-        interval: `${scheduleNextReview(FRICTION_BASELINE, 2, '2026-01-01').interval_days}d`,
-        cls: 'bg-healthy/20 text-healthy ring-healthy/40',
-    },
-    {
-        key: '3' as const,
-        label: 'Archive',
-        interval: `${scheduleNextReview(FRICTION_BASELINE, 3, '2026-01-01').interval_days}d`,
-        cls: 'bg-archive/20 text-archive ring-archive/40',
-    },
-];
+const FRICTION = ([0, 1, 2, 3] as Grade[]).map((grade) => {
+    const result = scheduleNextReview(FRICTION_BASELINE, grade, '2026-01-01');
+
+    const metadata = {
+        0: {
+            label: 'Trench',
+            cls: 'bg-lapsed/20 text-lapsed ring-lapsed/40',
+        },
+        1: {
+            label: 'Grind',
+            cls: 'bg-white/10 text-foreground ring-border',
+        },
+        2: {
+            label: 'Triumph',
+            cls: 'bg-healthy/20 text-healthy ring-healthy/40',
+        },
+        3: {
+            label: result.archived ? 'Archive' : 'Extend',
+            cls: result.archived
+                ? 'bg-archive/20 text-archive ring-archive/40'
+                : 'bg-healthy/20 text-healthy ring-healthy/40',
+        },
+    }[grade];
+
+    return {
+        key: grade,
+        ...metadata,
+        result,
+    };
+});
 
 function FrictionSwitch() {
     const [active, setActive] = useState<number | null>(null);
@@ -139,31 +149,32 @@ function FrictionSwitch() {
     return (
         <div className="rounded-lg bg-background/70 p-3 ring-1 ring-hairline">
             <div className="grid grid-cols-4 gap-2">
-                {FRICTION.map((g, i) => (
+                {FRICTION.map((grade, index) => (
                     <button
-                        key={g.key}
+                        key={grade.key}
                         type="button"
-                        onPointerEnter={() => setActive(i)}
-                        onFocus={() => setActive(i)}
+                        onPointerEnter={() => setActive(index)}
+                        onFocus={() => setActive(index)}
                         onPointerLeave={() => setActive(null)}
                         onBlur={() => setActive(null)}
                         className={cn(
                             'metric h-10 min-h-[44px] rounded-md text-[13px] tabular-nums ring-1 transition-all duration-150 ease-out',
-                            active === i
-                                ? cn(g.cls, '-translate-y-0.5')
+                            active === index
+                                ? cn(grade.cls, '-translate-y-0.5')
                                 : 'bg-white/[0.04] text-muted-foreground ring-border',
                         )}
-                        aria-label={`${g.key} ${g.label}, ${g.interval} interval`}
+                        aria-label={`${grade.key} ${grade.label}, ${grade.result.interval_days}d interval`}
                     >
-                        {g.key}
+                        {grade.key}
                     </button>
                 ))}
             </div>
+
             <div className="mt-2.5 flex min-h-[1.25rem] items-center">
                 <p className="metric text-[11px] text-muted-foreground transition-opacity duration-150">
                     {active === null
                         ? 'hover a grade'
-                        : `${FRICTION[active]!.label} · next review in ${FRICTION[active]!.interval}`}
+                        : `${FRICTION[active]!.label} · next review in ${FRICTION[active]!.result.interval_days}d`}
                 </p>
             </div>
         </div>
@@ -200,6 +211,7 @@ function DecayCurve() {
                         />
                     </filter>
                 </defs>
+
                 <path
                     d="M14,62 C48,58 60,50 78,44 C106,34 118,32 142,28 C172,22 188,18 210,14"
                     fill="none"
@@ -207,43 +219,49 @@ function DecayCurve() {
                     strokeWidth={2.25}
                     strokeLinecap="round"
                 />
-                {DECAY.map((p, i) => {
-                    const isLast = i === DECAY.length - 1;
+
+                {DECAY.map((point, index) => {
+                    const isLast = index === DECAY.length - 1;
+
                     return (
                         <g
-                            key={p.label}
-                            onPointerEnter={() => setHover(i)}
+                            key={point.label}
+                            onPointerEnter={() => setHover(index)}
                             onPointerLeave={() => setHover(null)}
                         >
-                            <circle cx={p.x} cy={p.y} r={9} fill="transparent" />
+                            <circle cx={point.x} cy={point.y} r={9} fill="transparent" />
+
                             <circle
-                                cx={p.x}
-                                cy={p.y}
-                                r={hover === i ? 7 : 5}
+                                cx={point.x}
+                                cy={point.y}
+                                r={hover === index ? 7 : 5}
                                 fill="var(--healthy)"
                                 opacity={0.18}
                                 className="transition-all duration-150"
                             />
+
                             <circle
-                                cx={p.x}
-                                cy={p.y}
+                                cx={point.x}
+                                cy={point.y}
                                 r={isLast ? 3.2 : 2.6}
                                 fill="var(--healthy)"
                                 filter={isLast ? `url(#${glowId})` : undefined}
                             />
+
                             <text
-                                x={p.x}
-                                y={p.y - 12}
+                                x={point.x}
+                                y={point.y - 12}
                                 textAnchor="middle"
                                 className="metric fill-foreground text-[9px] transition-opacity duration-150"
-                                opacity={hover === i ? 1 : 0}
+                                opacity={hover === index ? 1 : 0}
                             >
-                                {p.label}
+                                {point.label}
                             </text>
                         </g>
                     );
                 })}
             </svg>
+
             <div className="mt-2.5 flex min-h-[1.25rem] items-center">
                 <p className="metric text-[11px] text-muted-foreground transition-opacity duration-150">
                     {hover === null
@@ -256,8 +274,16 @@ function DecayCurve() {
 }
 
 const TIMELINE = [
-    { x: 96, label: '60d', desc: 'graduates to archived - out of daily rotation' },
-    { x: 206, label: '180d', desc: "one decay check - pulled back if it's drifted" },
+    {
+        x: 96,
+        label: '60d',
+        desc: 'graduates to archived - out of daily rotation',
+    },
+    {
+        x: 206,
+        label: '180d',
+        desc: "one decay check - pulled back if it's drifted",
+    },
 ];
 
 function ArchiveTimeline() {
@@ -280,6 +306,7 @@ function ArchiveTimeline() {
                     strokeWidth={2.25}
                     strokeLinecap="round"
                 />
+
                 <line
                     x1={96}
                     y1={20}
@@ -290,34 +317,39 @@ function ArchiveTimeline() {
                     strokeDasharray="1 5"
                     strokeLinecap="round"
                 />
-                {TIMELINE.map((p, i) => (
+
+                {TIMELINE.map((point, index) => (
                     <g
-                        key={p.label}
-                        onPointerEnter={() => setHover(i)}
+                        key={point.label}
+                        onPointerEnter={() => setHover(index)}
                         onPointerLeave={() => setHover(null)}
                     >
-                        <circle cx={p.x} cy={20} r={9} fill="transparent" />
+                        <circle cx={point.x} cy={20} r={9} fill="transparent" />
+
                         <circle
-                            cx={p.x}
+                            cx={point.x}
                             cy={20}
-                            r={hover === i ? 7 : 5}
+                            r={hover === index ? 7 : 5}
                             fill="var(--healthy)"
                             opacity={0.18}
                             className="transition-all duration-150"
                         />
-                        <circle cx={p.x} cy={20} r={2.8} fill="var(--healthy)" />
+
+                        <circle cx={point.x} cy={20} r={2.8} fill="var(--healthy)" />
+
                         <text
-                            x={p.x}
+                            x={point.x}
                             y={8}
                             textAnchor="middle"
                             className="metric fill-foreground text-[9px] transition-opacity duration-150"
-                            opacity={hover === i ? 1 : 0.55}
+                            opacity={hover === index ? 1 : 0.55}
                         >
-                            {p.label}
+                            {point.label}
                         </text>
                     </g>
                 ))}
             </svg>
+
             <div className="mt-2.5 flex min-h-[1.25rem] items-center">
                 <p className="metric text-[11px] text-muted-foreground transition-opacity duration-150">
                     {hover === null
