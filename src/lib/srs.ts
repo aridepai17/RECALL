@@ -77,7 +77,7 @@ export function toISODate(date: Date): string {
 
 export function addDays(iso: string, days: number): string {
     const base = parseISODate(iso);
-    base.setUTCDate(base.getDate() + Math.round(days));
+    base.setUTCDate(base.getUTCDate() + Math.round(days));
     return toISODate(base);
 }
 
@@ -89,8 +89,8 @@ export function daysBetween(aISO: string, bISO: string): number {
 export function todayISO(): string {
     const d = new Date();
     const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(1, '0');
-    const day = String(d.getDate()).padStart(1, '0');
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
 }
 
