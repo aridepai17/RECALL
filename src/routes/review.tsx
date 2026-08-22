@@ -44,9 +44,22 @@ export const Route = createFileRoute('/review')({
 const TRANSITION = { duration: 0.15, ease: [0.16, 1, 0.3, 1] as const };
 
 function ReviewEngine() {
-    const today = useMemo(() => todayISO(), []);
+    const [today, setToday] = useState(() => todayISO());
     const queryClient = useQueryClient();
     const { data: problems, isPending } = useQuery(problemsQuery);
+
+    useEffect(() => {
+        const handleFocus = () => {
+            const currentIso = todayISO();
+            setToday((prev) => (prev !== currentIso ? currentIso : prev));
+        };
+        window.addEventListener('focus', handleFocus);
+        const interval = setInterval(handleFocus, 1000 * 60 * 15); // check every 15 mins
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            clearInterval(interval);
+        };
+    }, []);
 
     const [graded, setGraded] = useState<Set<string>>(() => new Set());
     const [revealed, setRevealed] = useState(false);
@@ -72,8 +85,23 @@ function ReviewEngine() {
 
     const commitMutation = useMutation({
         mutationFn: async ({ problem, gradeValue }: { problem: Problem; gradeValue: Grade }) => {
-            const next = scheduleNextReview(problem, gradeValue, today);
-            await commitReview({ id: problem.id }, gradeValue, next, today);
+            const latestProblems =
+                queryClient.getQueryData<Problem[]>(problemsQuery.queryKey) ?? [];
+            const freshProblem = latestProblems.find((p) => p.id === problem.id);
+
+            if (
+                freshProblem &&
+                (freshProblem.interval_days !== problem.interval_days ||
+                    freshProblem.reps !== problem.reps ||
+                    freshProblem.lapses !== problem.lapses ||
+                    freshProblem.due_date !== problem.due_date)
+            ) {
+                throw new Error('stale_write: problem state drifted across tabs');
+            }
+
+            const activeToday = todayISO();
+            const next = scheduleNextReview(problem, gradeValue, activeToday);
+            await commitReview({ id: problem.id }, gradeValue, next, activeToday);
         },
         onMutate: async ({ problem }) => {
             setGraded((prev) => new Set(prev).add(problem.id));
