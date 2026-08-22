@@ -1,6 +1,7 @@
 import { useId, useRef, useState, type ReactNode } from 'react';
 import { motion, useMotionTemplate, useMotionValue } from 'motion/react';
 import { Terminal, Gauge, TrendingDown, Archive } from 'lucide-react';
+import { scheduleNextReview } from '@/lib/srs';
 import { cn } from '@/lib/utils';
 
 function SpotlightCard({
@@ -98,19 +99,36 @@ function BlankScreen() {
     );
 }
 
+const FRICTION_BASELINE = {
+    interval_days: 7,
+    ease_factor: 2.5,
+    reps: 3,
+    lapses: 0,
+} as const;
+
 const FRICTION = [
-    { key: '0', label: 'Trench', interval: '1d', cls: 'bg-lapsed/20 text-lapsed ring-lapsed/40' },
-    { key: '1', label: 'Grind', interval: '3d', cls: 'bg-white/10 text-foreground ring-border' },
     {
-        key: '2',
+        key: '0' as const,
+        label: 'Trench',
+        interval: `${scheduleNextReview(FRICTION_BASELINE, 0, '2026-01-01').interval_days}d`,
+        cls: 'bg-lapsed/20 text-lapsed ring-lapsed/40',
+    },
+    {
+        key: '1' as const,
+        label: 'Grind',
+        interval: `${scheduleNextReview(FRICTION_BASELINE, 1, '2026-01-01').interval_days}d`,
+        cls: 'bg-white/10 text-foreground ring-border',
+    },
+    {
+        key: '2' as const,
         label: 'Triumph',
-        interval: '7d',
+        interval: `${scheduleNextReview(FRICTION_BASELINE, 2, '2026-01-01').interval_days}d`,
         cls: 'bg-healthy/20 text-healthy ring-healthy/40',
     },
     {
-        key: '3',
+        key: '3' as const,
         label: 'Archive',
-        interval: '30d',
+        interval: `${scheduleNextReview(FRICTION_BASELINE, 3, '2026-01-01').interval_days}d`,
         cls: 'bg-archive/20 text-archive ring-archive/40',
     },
 ];
@@ -332,7 +350,7 @@ export function DashboardMechanics() {
                     formula="0–3"
                     formulaTone="text-foreground/70"
                     icon={<Gauge className="size-4" strokeWidth={1.75} />}
-                    body="You grade effort, not correctness. A 0 lapses to a one-day reset; higher grades move the ease factor and the interval together."
+                    body="You grade effort, not correctness. A 0 lapses to a one-day reset; higher grades change the ease factor and interval based on the problem's current review state."
                 >
                     <FrictionSwitch />
                 </SpotlightCard>
