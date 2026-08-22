@@ -60,6 +60,7 @@ function ReviewEngine() {
             setToday((prev) => {
                 if (prev !== currentIso) {
                     setGraded(new Set());
+                    setRevealed(false);
                     setSessionSize(null);
                     return currentIso;
                 }
@@ -93,7 +94,6 @@ function ReviewEngine() {
 
     const commitMutation = useMutation({
         mutationFn: async ({ problem, gradeValue }: { problem: Problem; gradeValue: Grade }) => {
-            // Read directly from authoritative storage to accurately catch cross-tab modifications
             const latestProblems = await loadProblems();
             const freshProblem = latestProblems.find((p: Problem) => p.id === problem.id);
 
