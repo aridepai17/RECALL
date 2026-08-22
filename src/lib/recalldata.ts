@@ -78,19 +78,23 @@ export async function commitReview(
     if (idx === -1) throw new Error(`commitReview: problem ${problem.id} not found`);
 
     const history = readList(HISTORY_KEY, HistoryEntrySchema);
-    history.push({
-        id: newId(),
-        problem_id: problem.id,
-        grade,
-        interval_days: next.interval_days,
-        ease_factor: next.ease_factor,
-        reviewed_on: reviewedOn,
-        created_at: new Date().toISOString(),
-    });
-    writeList(HISTORY_KEY, history);
 
-    problems[idx] = {
-        ...problems[idx]!,
+    const updatedHistory = [
+        ...history,
+        {
+            id: newId(),
+            problem_id: problem.id,
+            grade,
+            interval_days: next.interval_days,
+            ease_factor: next.ease_factor,
+            reviewed_on: reviewedOn,
+            created_at: new Date().toISOString(),
+        },
+    ];
+
+    const updatedProblems = [...problems];
+    updatedProblems[idx] = {
+        ...updatedProblems[idx]!,
         interval_days: next.interval_days,
         ease_factor: next.ease_factor,
         reps: next.reps,
@@ -99,7 +103,21 @@ export async function commitReview(
         archived: next.archived,
         updated_at: new Date().toISOString(),
     };
-    writeList(PROBLEMS_KEY, problems);
+
+    const previousHistory = window.localStorage.getItem(HISTORY_KEY);
+
+    try {
+        writeList(HISTORY_KEY, updatedHistory);
+        writeList(PROBLEMS_KEY, updatedProblems);
+    } catch (error) {
+        if (previousHistory === null) {
+            window.localStorage.removeItem(HISTORY_KEY);
+        } else {
+            window.localStorage.setItem(HISTORY_KEY, previousHistory);
+        }
+
+        throw error;
+    }
 }
 
 export async function addProblem(input: {
