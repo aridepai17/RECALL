@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useState, type SubmitEvent } from 'react';
-import { PATTERNS, addProblem, commitReview, loadProblems, problemsQuery } from '@/lib/recalldata';
+import { PATTERNS, addProblem, commitReview, problemsQuery } from '@/lib/recalldata';
 import {
     GRADES,
     GRADE_HINTS,
@@ -94,22 +94,10 @@ function ReviewEngine() {
 
     const commitMutation = useMutation({
         mutationFn: async ({ problem, gradeValue }: { problem: Problem; gradeValue: Grade }) => {
-            const latestProblems = await loadProblems();
-            const freshProblem = latestProblems.find((p: Problem) => p.id === problem.id);
-
-            if (
-                freshProblem &&
-                (freshProblem.interval_days !== problem.interval_days ||
-                    freshProblem.reps !== problem.reps ||
-                    freshProblem.lapses !== problem.lapses ||
-                    freshProblem.due_date !== problem.due_date)
-            ) {
-                throw new Error('stale_write: problem state drifted across tabs');
-            }
-
             const activeToday = todayISO();
             const next = scheduleNextReview(problem, gradeValue, activeToday);
-            await commitReview({ id: problem.id }, gradeValue, next, activeToday);
+
+            await commitReview(problem, gradeValue, next, activeToday);
         },
         onMutate: async ({ problem }) => {
             setGraded((prev) => new Set(prev).add(problem.id));
