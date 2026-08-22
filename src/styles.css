@@ -1,0 +1,145 @@
+@import 'tailwindcss';
+@source "../src";
+@import 'tw-animate-css';
+
+@theme inline {
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+    --radius-2xl: calc(var(--radius) + 8px);
+
+    --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'Geist Mono', ui-monospace, monospace;
+    --font-geist-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+    --font-geist-mono: 'Geist Mono', ui-monospace, monospace;
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-surface: var(--surface);
+    --color-surface-raised: var(--surface-raised);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-healthy: var(--healthy);
+    --color-lapsed: var(--lapsed);
+    --color-archive: var(--archive);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-hairline: var(--hairline);
+}
+
+:root {
+    --radius: 0.25rem;
+    --background: #000000;
+    --foreground: oklch(0.925 0.011 85);
+
+    /* Surface Colors */
+    --surface: oklch(0.222 0.013 264);
+    --surface-raised: oklch(0.252 0.014 264);
+    --card: var(--surface);
+    --card-foreground: oklch(0.925 0.011 85);
+    --popover: var(--surface-raised);
+    --popover-foreground: oklch(0.925 0.011 85);
+
+    /* Core UI Colors */
+    --primary: oklch(0.769 0.135 74.5);
+    --primary-foreground: oklch(0.19 0.02 70);
+    --secondary: var(--surface-raised);
+    --secondary-foreground: oklch(0.925 0.011 85);
+    --muted: var(--surface-raised);
+    --muted-foreground: oklch(0.63 0.011 264);
+    --accent: oklch(0.28 0.015 264);
+    --accent-foreground: oklch(0.925 0.011 85);
+
+    /* SRS State Colors */
+    --lapsed: oklch(0.585 0.132 27.5); /* Muted Brick Red */
+    --destructive: var(--lapsed);
+    --destructive-foreground: oklch(0.96 0.01 85);
+    --healthy: oklch(0.665 0.062 189); /* Muted Pine Green */
+    --archive: oklch(0.635 0.052 245); /* Cold Slate Blue */
+
+    /* Borders & Lines */
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 14%);
+    --ring: oklch(0.769 0.135 74.5 / 55%);
+    --hairline: oklch(1 0 0 / 8%);
+}
+
+@layer base {
+    * {
+        border-color: var(--color-border);
+    }
+
+    html {
+        color-scheme: dark;
+        -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+        background-color: var(--color-background);
+        color: var(--color-foreground);
+        font-family: var(--font-sans);
+        font-feature-settings: 'ss01';
+    }
+
+    ::selection {
+        background-color: oklch(0.769 0.135 74.5 / 25%);
+    }
+}
+
+/* Low-opacity technical grid */
+@utility blueprint-grid {
+    background-image:
+        linear-gradient(to right, var(--color-hairline) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--color-hairline) 1px, transparent 1px);
+    background-size: 64px 64px;
+}
+
+@utility blueprint-fade {
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 10%, transparent 75%);
+}
+
+/* Zero-offset hairline instead of dropshadows */
+@utility panel {
+    background-color: var(--color-surface);
+    box-shadow: 0 0 0 1px var(--color-border);
+    border-radius: var(--radius-lg);
+}
+
+@utility metric {
+    font-family: var(--font-geist-sans);
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+}
+
+@utility kbd-chip {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0.35rem 0.5rem;
+    border-radius: calc(var(--radius) - 3px);
+    color: var(--color-foreground);
+    background-color: oklch(1 0 0 / 8%);
+    box-shadow: 0 0 0 1px var(--color-border);
+}
+
+@utility hero-type {
+    font-weight: 600;
+    letter-spacing: -0.045em;
+    line-height: 0.98;
+}
