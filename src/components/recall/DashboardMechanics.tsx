@@ -1,7 +1,9 @@
-import { useId, useRef, useState, type ReactNode } from 'react';
+import { useId, useRef, useState, type ReactNode, useMemo } from 'react';
 import { motion, useMotionTemplate, useMotionValue } from 'motion/react';
 import { Terminal, Gauge, TrendingDown, Archive } from 'lucide-react';
-import { scheduleNextReview, type Grade } from '@/lib/srs';
+import { useQuery } from '@tanstack/react-query';
+import { scheduleNextReview, buildDailyQueue, todayISO, type Grade } from '@/lib/srs';
+import { problemsQuery } from '@/lib/recalldata';
 import { cn } from '@/lib/utils';
 
 function SpotlightCard({
@@ -99,57 +101,26 @@ function BlankScreen() {
             </button>
 
             <p className="metric mt-2 text-[11px] text-muted-foreground">
-                two-sum.ts — {revealed ? 'revealed' : 'tap to reveal'}
+                twoSum.ts - {revealed ? 'revealed' : 'tap to reveal'}
             </p>
         </div>
     );
 }
 
-const FRICTION_BASELINE = {
-    interval_days: 7,
-    ease_factor: 2.5,
-    reps: 3,
-    lapses: 0,
-} as const;
+interface FrictionItem {
+    key: number;
+    label: string;
+    cls: string;
+    result: { interval_days: number; archived: boolean };
+}
 
-const FRICTION = ([0, 1, 2, 3] as Grade[]).map((grade) => {
-    const result = scheduleNextReview(FRICTION_BASELINE, grade, '2026-01-01');
-
-    const metadata = {
-        0: {
-            label: 'Trench',
-            cls: 'bg-lapsed/20 text-lapsed ring-lapsed/40',
-        },
-        1: {
-            label: 'Grind',
-            cls: 'bg-white/10 text-foreground ring-border',
-        },
-        2: {
-            label: 'Triumph',
-            cls: 'bg-healthy/20 text-healthy ring-healthy/40',
-        },
-        3: {
-            label: result.archived ? 'Archive' : 'Extend',
-            cls: result.archived
-                ? 'bg-archive/20 text-archive ring-archive/40'
-                : 'bg-healthy/20 text-healthy ring-healthy/40',
-        },
-    }[grade];
-
-    return {
-        key: grade,
-        ...metadata,
-        result,
-    };
-});
-
-function FrictionSwitch() {
+function FrictionSwitch({ friction }: { friction: FrictionItem[] }) {
     const [active, setActive] = useState<number | null>(null);
 
     return (
         <div className="rounded-lg bg-background/70 p-3 ring-1 ring-hairline">
             <div className="grid grid-cols-4 gap-2">
-                {FRICTION.map((grade, index) => (
+                {friction.map((grade, index) => (
                     <button
                         key={grade.key}
                         type="button"
@@ -163,18 +134,18 @@ function FrictionSwitch() {
                                 ? cn(grade.cls, '-translate-y-0.5')
                                 : 'bg-white/[0.04] text-muted-foreground ring-border',
                         )}
-                        aria-label={`${grade.key} ${grade.label}, ${grade.result.interval_days}d interval`}
+                        aria-label={`${grade.key} ${grade.label}, ${grade.result.interval_days} days interval`}
                     >
                         {grade.key}
                     </button>
                 ))}
             </div>
 
-            <div className="mt-2.5 flex min-h-[1.25rem] items-center">
-                <p className="metric text-[11px] text-muted-foreground transition-opacity duration-150">
+            <div className="mt-2.5 flex min-h-[1.25rem] items-center justify-between">
+                <p className="metric text-[11px] text-muted-foreground transition-opacity duration-150 truncate">
                     {active === null
                         ? 'hover a grade'
-                        : `${FRICTION[active]!.label} · next review in ${FRICTION[active]!.result.interval_days}d`}
+                        : `${friction[active]!.label} · next review in ${friction[active]!.result.interval_days} days`}
                 </p>
             </div>
         </div>
@@ -182,10 +153,10 @@ function FrictionSwitch() {
 }
 
 const DECAY = [
-    { x: 14, y: 62, label: '1d', desc: 'reset' },
-    { x: 78, y: 44, label: '3d', desc: 'consolidation' },
-    { x: 142, y: 28, label: '7d', desc: 'medium-term' },
-    { x: 210, y: 14, label: '30d', desc: 'long-term' },
+    { x: 14, y: 62, label: '1 day', desc: 'reset' },
+    { x: 78, y: 44, label: '3 days', desc: 'consolidation' },
+    { x: 142, y: 28, label: '7 days', desc: 'medium-term' },
+    { x: 210, y: 14, label: '30 days', desc: 'long-term' },
 ];
 
 function DecayCurve() {
@@ -276,12 +247,12 @@ function DecayCurve() {
 const TIMELINE = [
     {
         x: 96,
-        label: '60d',
+        label: '60 days',
         desc: 'graduates to archived - out of daily rotation',
     },
     {
         x: 206,
-        label: '180d',
+        label: '180 days',
         desc: "one decay check - pulled back if it's drifted",
     },
 ];
@@ -362,6 +333,67 @@ function ArchiveTimeline() {
 }
 
 export function DashboardMechanics() {
+    const { data: problems = [] } = useQuery(problemsQuery);
+    const today = todayISO();
+
+    // Pull the real queue and grab the first due problem
+    const queue = useMemo(() => buildDailyQueue(problems, today), [problems, today]);
+    const activeItem = queue[0];
+    const activeProblem = activeItem?.problem;
+
+    // Use active problem's stats as baseline, or fall back to default preview values if empty
+    const baseline = useMemo(
+        () =>
+            activeProblem
+                ? {
+                      interval_days: activeProblem.interval_days,
+                      ease_factor: activeProblem.ease_factor,
+                      reps: activeProblem.reps,
+                      lapses: activeProblem.lapses,
+                  }
+                : {
+                      interval_days: 7,
+                      ease_factor: 2.5,
+                      reps: 3,
+                      lapses: 0,
+                  },
+        [activeProblem],
+    );
+
+    // Calculate live preview intervals based on the current baseline
+    const friction = useMemo(() => {
+        return ([0, 1, 2, 3] as Grade[]).map((grade) => {
+            const result = scheduleNextReview(baseline, grade, today);
+
+            const metadata = {
+                0: {
+                    label: 'Trench',
+                    cls: 'bg-lapsed/20 text-lapsed ring-lapsed/40',
+                },
+                1: {
+                    label: 'Grind',
+                    cls: 'bg-white/10 text-foreground ring-border',
+                },
+                2: {
+                    label: 'Triumph',
+                    cls: 'bg-healthy/20 text-healthy ring-healthy/40',
+                },
+                3: {
+                    label: result.archived ? 'Archive' : 'Extend',
+                    cls: result.archived
+                        ? 'bg-archive/20 text-archive ring-archive/40'
+                        : 'bg-primary/20 text-primary ring-primary/40',
+                },
+            }[grade];
+
+            return {
+                key: grade,
+                ...metadata,
+                result,
+            };
+        });
+    }, [baseline, today]);
+
     return (
         <section aria-label="System mechanics">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
@@ -384,7 +416,7 @@ export function DashboardMechanics() {
                     icon={<Gauge className="size-4" strokeWidth={1.75} />}
                     body="You grade effort, not correctness. A 0 lapses to a one-day reset; higher grades change the ease factor and interval based on the problem's current review state."
                 >
-                    <FrictionSwitch />
+                    <FrictionSwitch friction={friction} />
                 </SpotlightCard>
 
                 <SpotlightCard
@@ -401,7 +433,7 @@ export function DashboardMechanics() {
                 <SpotlightCard
                     index="04"
                     title="Archive & Decay Check"
-                    formula="≥60d → archived"
+                    formula="≥60 days → archived"
                     formulaTone="text-healthy/80"
                     icon={<Archive className="size-4" strokeWidth={1.75} />}
                     body="Mastery isn't the end. Once an interval clears the threshold it graduates out of daily rotation - then gets one honest check-in later, never forgotten permanently."
