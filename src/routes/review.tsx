@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useState, type SubmitEvent } from 'react';
-import { PATTERNS, addProblem, commitReview, problemsQuery } from '@/lib/recalldata';
+import { PATTERNS, addProblem, commitReview, loadProblems, problemsQuery } from '@/lib/recalldata';
 import {
     GRADES,
     GRADE_HINTS,
@@ -48,10 +48,23 @@ function ReviewEngine() {
     const queryClient = useQueryClient();
     const { data: problems, isPending } = useQuery(problemsQuery);
 
+    const [graded, setGraded] = useState<Set<string>>(() => new Set());
+    const [revealed, setRevealed] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [sessionSize, setSessionSize] = useState<number | null>(null);
+
+    // Keep 'today' fresh across midnight and reset session state on date change
     useEffect(() => {
         const handleFocus = () => {
             const currentIso = todayISO();
-            setToday((prev) => (prev !== currentIso ? currentIso : prev));
+            setToday((prev) => {
+                if (prev !== currentIso) {
+                    setGraded(new Set());
+                    setSessionSize(null);
+                    return currentIso;
+                }
+                return prev;
+            });
         };
         window.addEventListener('focus', handleFocus);
         const interval = setInterval(handleFocus, 1000 * 60 * 15); // check every 15 mins
@@ -60,11 +73,6 @@ function ReviewEngine() {
             clearInterval(interval);
         };
     }, []);
-
-    const [graded, setGraded] = useState<Set<string>>(() => new Set());
-    const [revealed, setRevealed] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [sessionSize, setSessionSize] = useState<number | null>(null);
 
     const queue = useMemo(
         () =>
@@ -85,9 +93,9 @@ function ReviewEngine() {
 
     const commitMutation = useMutation({
         mutationFn: async ({ problem, gradeValue }: { problem: Problem; gradeValue: Grade }) => {
-            const latestProblems =
-                queryClient.getQueryData<Problem[]>(problemsQuery.queryKey) ?? [];
-            const freshProblem = latestProblems.find((p) => p.id === problem.id);
+            // Read directly from authoritative storage to accurately catch cross-tab modifications
+            const latestProblems = await loadProblems();
+            const freshProblem = latestProblems.find((p: Problem) => p.id === problem.id);
 
             if (
                 freshProblem &&
