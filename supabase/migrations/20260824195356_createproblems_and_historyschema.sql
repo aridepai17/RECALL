@@ -74,6 +74,21 @@ create trigger trg_problems_touch_updated_at
     for each row
     execute function public.touch_updated_at();
 
+create or replace function public.enforce_append_only()
+returns trigger
+language plpgsql
+as $$
+begin
+    raise exception 'Data Integrity Violation: The problem_history table is strictly append-only. UPDATE and DELETE actions are forbidden.';
+end;
+$$;
+
+create trigger trg_problem_history_append_only
+    before update or delete on public.problem_history
+    for each row
+    execute function public.enforce_append_only();
+
+
 alter table public.problems enable row level security;
 alter table public.problem_history enable row level security;
 
