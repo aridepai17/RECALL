@@ -7,7 +7,7 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default [
     {
-        ignores: ['node_modules/', 'dist/', 'out/', 'coverage/', '.cache/'],
+        ignores: ['node_modules/', 'dist/', 'out/', 'coverage/', '.cache/', 'supabase/'],
     },
 
     js.configs.recommended,
