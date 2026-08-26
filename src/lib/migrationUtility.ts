@@ -411,22 +411,8 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
                 ],
             };
         }
-        if (!existingOwner) {
-            return {
-                status: 'failed',
-                problemsTotal: 0,
-                problemsMigrated: 0,
-                historyTotal: 0,
-                historyMigrated: 0,
-                errors: [
-                    {
-                        stage: 'extraction',
-                        message:
-                            'localStorage data exists without ownership marker. Migration skipped to prevent cross-account data exposure on shared browsers.',
-                    },
-                ],
-            };
-        }
+        // Allow migration if no owner marker exists (first-time migration for existing users)
+        // The marker will be written after successful migration
     }
 
     if (legacyProblems.length === 0 && legacyHistory.length === 0) {
