@@ -81,8 +81,9 @@ type ProblemPattern = Database['public']['Enums']['problem_pattern'];
 type ProblemInsert = Database['public']['Tables']['problems']['Insert'];
 type HistoryInsert = Database['public']['Tables']['problem_history']['Insert'];
 
-interface ResolvedProblemInsert extends Omit<ProblemInsert, 'id'> {
+interface ResolvedProblemInsert extends Omit<ProblemInsert, 'id' | 'user_id'> {
     id: string;
+    user_id: string;
 }
 interface ResolvedHistoryInsert extends Omit<HistoryInsert, 'id' | 'problem_id'> {
     id: string;
@@ -177,6 +178,7 @@ function readLegacyList<T>(key: string, schema: z.ZodType<T>, errors: MigrationE
 
 async function toProblemInsert(
     legacy: LegacyProblem,
+    userId: string,
     errors: MigrationError[],
 ): Promise<ResolvedProblem | null> {
     if (!isValidPattern(legacy.pattern)) {
@@ -196,6 +198,7 @@ async function toProblemInsert(
         legacyId: legacy.id,
         insert: {
             id: resolvedId,
+            user_id: userId,
             name: legacy.name.trim(),
             pattern: legacy.pattern,
             url: legacy.url,
@@ -365,6 +368,26 @@ async function upsertHistoryChunked(
 export async function runLocalStorageMigration(): Promise<MigrationResult> {
     const errors: MigrationError[] = [];
 
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+        return {
+            status: 'failed',
+            problemsTotal: 0,
+            problemsMigrated: 0,
+            historyTotal: 0,
+            historyMigrated: 0,
+            errors: [
+                {
+                    stage: 'extraction',
+                    message:
+                        'User not authenticated. Migration requires authentication to assign user_id to migrated records.',
+                },
+            ],
+        };
+    }
+
     const legacyProblems = readLegacyList(PROBLEMS_KEY, LegacyProblemSchema, errors);
     const legacyHistory = readLegacyList(HISTORY_KEY, LegacyHistoryEntrySchema, errors);
 
@@ -381,7 +404,7 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
 
     const resolved = (
         await Promise.all(
-            legacyProblems.map(async (legacy) => await toProblemInsert(legacy, errors)),
+            legacyProblems.map(async (legacy) => await toProblemInsert(legacy, user.id, errors)),
         )
     ).filter((r): r is ResolvedProblem => r !== null);
 
