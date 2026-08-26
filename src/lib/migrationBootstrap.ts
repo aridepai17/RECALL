@@ -2,12 +2,12 @@ import { runLocalStorageMigration, type MigrationResult } from './migrationUtili
 import type { QueryClient } from '@tanstack/react-query';
 
 const MIGRATION_MARKER_KEY = 'recall:migration-status';
-type MigrationMarker = 'success' | 'empty';
+type MigrationMarker = 'success' | 'empty' | 'ownership_mismatch';
 
 function readMarker(): MigrationMarker | null {
     if (typeof window === 'undefined') return null;
     const raw = window.localStorage.getItem(MIGRATION_MARKER_KEY);
-    return raw === 'success' || raw === 'empty' ? raw : null;
+    return raw === 'success' || raw === 'empty' || raw === 'ownership_mismatch' ? raw : null;
 }
 
 function writeMarker(value: MigrationMarker): void {
@@ -20,7 +20,12 @@ function writeMarker(value: MigrationMarker): void {
 }
 
 export async function ensureMigrated(queryClient?: QueryClient): Promise<MigrationResult | null> {
-    if (readMarker() !== null) return null;
+    const marker = readMarker();
+    if (marker === 'ownership_mismatch') {
+        console.info('[migrationBootstrap] Skipping migration due to ownership mismatch marker.');
+        return null;
+    }
+    if (marker !== null) return null;
 
     try {
         const result = await runLocalStorageMigration();
@@ -31,6 +36,24 @@ export async function ensureMigrated(queryClient?: QueryClient): Promise<Migrati
             if (queryClient) {
                 queryClient.invalidateQueries({ queryKey: ['problems'] });
                 queryClient.invalidateQueries({ queryKey: ['problem_history'] });
+            }
+        } else if (result.status === 'failed') {
+            // Check if this is an ownership mismatch - if so, mark it to prevent repeated attempts
+            const isOwnershipMismatch = result.errors.some(
+                (error) =>
+                    error.message.includes('different user') ||
+                    error.message.includes('cross-account'),
+            );
+            if (isOwnershipMismatch) {
+                writeMarker('ownership_mismatch');
+                console.warn(
+                    '[migrationBootstrap] Migration skipped due to ownership mismatch - localStorage data belongs to a different user.',
+                );
+            } else {
+                console.warn(
+                    `[migrationBootstrap] Migration finished with status "${result.status}" - will retry next boot.`,
+                    result.errors,
+                );
             }
         } else {
             console.warn(
