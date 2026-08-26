@@ -24,9 +24,7 @@ export const PATTERNS = [
 type ProblemPattern = Database['public']['Enums']['problem_pattern'];
 type ProblemRow = Database['public']['Tables']['problems']['Row'];
 type ProblemInsertPayload = Database['public']['Tables']['problems']['Insert'];
-type ProblemUpdatePayload = Database['public']['Tables']['problems']['Update'];
 type HistoryRow = Database['public']['Tables']['problem_history']['Row'];
-type HistoryInsertPayload = Database['public']['Tables']['problem_history']['Insert'];
 
 const VALID_PATTERNS = new Set<string>(PATTERNS);
 function isValidPattern(value: string): value is ProblemPattern {
@@ -177,48 +175,25 @@ export async function commitReview(
     next: ScheduleResult,
     reviewedOn: string,
 ): Promise<void> {
-    const update: ProblemUpdatePayload = {
-        interval_days: next.interval_days,
-        ease_factor: next.ease_factor,
-        reps: next.reps,
-        lapses: next.lapses,
-        due_date: next.due_date,
-        archived: next.archived,
-    };
+    const historyCreatedAt = new Date().toISOString();
 
-    const entry: HistoryInsertPayload = {
-        id: crypto.randomUUID(),
-        problem_id: problem.id,
-        grade,
-        interval_days: next.interval_days,
-        ease_factor: next.ease_factor,
-        reviewed_on: reviewedOn,
-        created_at: new Date().toISOString(),
-    };
+    const { error } = await supabase.rpc('commit_review', {
+        p_problem_id: problem.id,
+        p_interval_days: next.interval_days,
+        p_ease_factor: next.ease_factor,
+        p_reps: next.reps,
+        p_lapses: next.lapses,
+        p_due_date: next.due_date,
+        p_archived: next.archived,
+        p_expected_updated_at: problem.updated_at,
+        p_grade: grade,
+        p_reviewed_on: reviewedOn,
+        p_history_created_at: historyCreatedAt,
+    });
 
-    const { error: historyError } = await supabase.from('problem_history').insert(entry);
-
-    if (historyError) {
+    if (error) {
         throw new Error(
-            `commitReview: failed to record history for problem ${problem.id}: ${historyError.message}`,
-        );
-    }
-
-    const { data: updatedRows, error: updateError } = await supabase
-        .from('problems')
-        .update(update)
-        .eq('id', problem.id)
-        .eq('updated_at', problem.updated_at)
-        .select();
-
-    if (updateError) {
-        throw new Error(
-            `commitReview: failed to update problem ${problem.id}: ${updateError.message}`,
-        );
-    }
-    if (!updatedRows || updatedRows.length === 0) {
-        throw new Error(
-            `stale_write: problem ${problem.id} was modified elsewhere since it was loaded.`,
+            `commitReview: failed to commit review for problem ${problem.id}: ${error.message}`,
         );
     }
 }
