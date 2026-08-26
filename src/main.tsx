@@ -91,4 +91,5 @@ if (import.meta.env.DEV) {
 }
 
 // Run migration in background without blocking initial render
-void ensureMigrated();
+// Pass queryClient to invalidate cached queries after migration completes
+void ensureMigrated(router.options.context.queryClient);
