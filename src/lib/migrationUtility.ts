@@ -19,6 +19,34 @@ import type { Database } from './database.types';
 const PROBLEMS_KEY = 'recall:problems';
 const HISTORY_KEY = 'recall:history';
 
+// Helper to generate a deterministic UUID v5 from a legacy non-UUID string
+// This guarantees that running the migration multiple times yields the exact same IDs
+async function toDeterministicUUID(name: string): Promise<string> {
+    // ISO Namespace UUID for custom object generation: 6ba7b811-9dad-11d1-80b4-00c04fd430c8
+    const namespaceBytes = new Uint8Array([
+        0x6b, 0xa7, 0xb8, 0x11, 0x9d, 0xad, 0x11, 0xd1, 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30,
+        0xc8,
+    ]);
+    const nameBytes = new TextEncoder().encode(name);
+    const totalBytes = new Uint8Array(namespaceBytes.length + nameBytes.length);
+    totalBytes.set(namespaceBytes);
+    totalBytes.set(nameBytes, namespaceBytes.length);
+
+    // Compute SHA-1 hash (Standard for UUID v5)
+    const hashBuffer = await crypto.subtle.digest('SHA-1', totalBytes);
+    const hashBytes = new Uint8Array(hashBuffer);
+
+    // Set version (5) and variant bits
+    hashBytes[6] = (hashBytes[6] & 0x0f) | 0x50;
+    hashBytes[8] = (hashBytes[8] & 0x3f) | 0x80;
+
+    // Format into standard canonical string UUID
+    const hex = Array.from(hashBytes)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CHUNK_SIZE = 500;
 
@@ -147,7 +175,10 @@ function readLegacyList<T>(key: string, schema: z.ZodType<T>, errors: MigrationE
     }
 }
 
-function toProblemInsert(legacy: LegacyProblem, errors: MigrationError[]): ResolvedProblem | null {
+async function toProblemInsert(
+    legacy: LegacyProblem,
+    errors: MigrationError[],
+): Promise<ResolvedProblem | null> {
     if (!isValidPattern(legacy.pattern)) {
         errors.push({
             stage: 'problems_upsert',
@@ -157,7 +188,9 @@ function toProblemInsert(legacy: LegacyProblem, errors: MigrationError[]): Resol
         return null;
     }
 
-    const resolvedId = UUID_RE.test(legacy.id) ? legacy.id : crypto.randomUUID();
+    const resolvedId = UUID_RE.test(legacy.id)
+        ? legacy.id
+        : await toDeterministicUUID(`problem:${legacy.id}`);
 
     return {
         legacyId: legacy.id,
@@ -180,12 +213,12 @@ function toProblemInsert(legacy: LegacyProblem, errors: MigrationError[]): Resol
     };
 }
 
-function toHistoryInsert(
+async function toHistoryInsert(
     legacy: LegacyHistoryEntry,
     idRemap: ReadonlyMap<string, string>,
     migratedProblemIds: ReadonlySet<string>,
     errors: MigrationError[],
-): ResolvedHistoryInsert | null {
+): Promise<ResolvedHistoryInsert | null> {
     const resolvedProblemId = idRemap.get(legacy.problem_id) ?? legacy.problem_id;
 
     if (!migratedProblemIds.has(resolvedProblemId)) {
@@ -207,7 +240,7 @@ function toHistoryInsert(
     }
 
     return {
-        id: UUID_RE.test(legacy.id) ? legacy.id : crypto.randomUUID(),
+        id: UUID_RE.test(legacy.id) ? legacy.id : await toDeterministicUUID(`history:${legacy.id}`),
         problem_id: resolvedProblemId,
         grade: legacy.grade,
         interval_days: Math.max(0, Math.min(365, Math.trunc(legacy.interval_days))),
@@ -346,9 +379,11 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
         };
     }
 
-    const resolved = legacyProblems
-        .map((legacy) => toProblemInsert(legacy, errors))
-        .filter((r): r is ResolvedProblem => r !== null);
+    const resolved = (
+        await Promise.all(
+            legacyProblems.map(async (legacy) => await toProblemInsert(legacy, errors)),
+        )
+    ).filter((r): r is ResolvedProblem => r !== null);
 
     const idRemap = new Map<string, string>();
     for (const { legacyId, insert } of resolved) {
@@ -358,9 +393,14 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
 
     const migratedProblemIds = await upsertProblemsChunked(resolvedProblems, errors);
 
-    const resolvedHistory = legacyHistory
-        .map((legacy) => toHistoryInsert(legacy, idRemap, migratedProblemIds, errors))
-        .filter((r): r is ResolvedHistoryInsert => r !== null);
+    const resolvedHistory = (
+        await Promise.all(
+            legacyHistory.map(
+                async (legacy) =>
+                    await toHistoryInsert(legacy, idRemap, migratedProblemIds, errors),
+            ),
+        )
+    ).filter((r): r is ResolvedHistoryInsert => r !== null);
 
     const historyMigrated = await upsertHistoryChunked(resolvedHistory, errors);
 
