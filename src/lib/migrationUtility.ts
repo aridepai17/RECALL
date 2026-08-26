@@ -18,6 +18,7 @@ import type { Database } from './database.types';
 
 const PROBLEMS_KEY = 'recall:problems';
 const HISTORY_KEY = 'recall:history';
+const MIGRATION_OWNER_KEY = 'recall:migration-owner';
 
 // Helper to generate a deterministic UUID v5 from a legacy non-UUID string
 // This guarantees that running the migration multiple times yields the exact same IDs
@@ -388,6 +389,27 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
         };
     }
 
+    // Check if localStorage data belongs to current user to prevent cross-account data exposure
+    if (typeof window !== 'undefined') {
+        const existingOwner = window.localStorage.getItem(MIGRATION_OWNER_KEY);
+        if (existingOwner && existingOwner !== user.id) {
+            return {
+                status: 'failed',
+                problemsTotal: 0,
+                problemsMigrated: 0,
+                historyTotal: 0,
+                historyMigrated: 0,
+                errors: [
+                    {
+                        stage: 'extraction',
+                        message:
+                            'localStorage data belongs to a different user. Migration skipped to prevent cross-account data exposure.',
+                    },
+                ],
+            };
+        }
+    }
+
     const legacyProblems = readLegacyList(PROBLEMS_KEY, LegacyProblemSchema, errors);
     const legacyHistory = readLegacyList(HISTORY_KEY, LegacyHistoryEntrySchema, errors);
 
@@ -434,6 +456,15 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
             : problemsMigrated > 0 || historyMigrated > 0
               ? 'partial'
               : 'failed';
+
+    // Mark localStorage as belonging to current user after successful migration
+    if (status === 'success' && typeof window !== 'undefined') {
+        try {
+            window.localStorage.setItem(MIGRATION_OWNER_KEY, user.id);
+        } catch (cause) {
+            console.error('[migrationUtility] Failed to write migration owner marker', cause);
+        }
+    }
 
     return {
         status,
