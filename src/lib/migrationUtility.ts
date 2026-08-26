@@ -408,26 +408,6 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
                 errors: [],
             };
         }
-
-        try {
-            window.localStorage.setItem(MIGRATION_OWNER_KEY, user.id);
-        } catch (cause) {
-            return {
-                status: 'failed',
-                problemsTotal: 0,
-                problemsMigrated: 0,
-                historyTotal: 0,
-                historyMigrated: 0,
-                errors: [
-                    {
-                        stage: 'extraction',
-                        message:
-                            'Failed to write migration owner marker. Migration aborted to prevent cross-account data exposure.',
-                        cause,
-                    },
-                ],
-            };
-        }
     }
 
     if (legacyProblems.length === 0 && legacyHistory.length === 0) {
@@ -474,7 +454,13 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
               ? 'partial'
               : 'failed';
 
-    // Ownership marker is written once before database writes above; no need to duplicate here
+    if (status === 'success' && typeof window !== 'undefined') {
+        try {
+            window.localStorage.setItem(MIGRATION_OWNER_KEY, user.id);
+        } catch {
+            // Marker write failure is non-blocking after successful migration
+        }
+    }
 
     return {
         status,
