@@ -197,7 +197,7 @@ function ReviewEngine() {
                     </div>
                 )}
 
-                {isPending ? (
+                {isPending && !queueErrored ? (
                     <span className="metric text-[0.75rem] text-muted-foreground">
                         loading queue…
                     </span>
