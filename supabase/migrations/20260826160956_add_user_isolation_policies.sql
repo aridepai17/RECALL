@@ -2,6 +2,16 @@
 drop policy if exists "problems_open_access_stub" on public.problems;
 drop policy if exists "problem_history_open_access_stub" on public.problem_history;
 
+-- Delete orphaned rows with NULL user_id before enabling isolation
+-- These would become invisible to all users under the new policies
+delete from public.problem_history
+where problem_id in (
+    select id from public.problems where user_id is null
+);
+
+delete from public.problems
+where user_id is null;
+
 -- Create user-isolated policies for problems table
 create policy "problems_select_own"
     on public.problems
