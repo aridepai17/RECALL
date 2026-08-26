@@ -1,26 +1,37 @@
 import { runLocalStorageMigration, type MigrationResult } from './migrationUtility';
+import { supabase } from './supabaseClient';
 import type { QueryClient } from '@tanstack/react-query';
 
 const MIGRATION_MARKER_KEY = 'recall:migration-status';
 type MigrationMarker = 'success' | 'empty' | 'ownership_mismatch';
 
-function readMarker(): MigrationMarker | null {
+function readMarker(userId: string): MigrationMarker | null {
     if (typeof window === 'undefined') return null;
-    const raw = window.localStorage.getItem(MIGRATION_MARKER_KEY);
+    const key = `${MIGRATION_MARKER_KEY}:${userId}`;
+    const raw = window.localStorage.getItem(key);
     return raw === 'success' || raw === 'empty' || raw === 'ownership_mismatch' ? raw : null;
 }
 
-function writeMarker(value: MigrationMarker): void {
+function writeMarker(userId: string, value: MigrationMarker): void {
     if (typeof window === 'undefined') return;
     try {
-        window.localStorage.setItem(MIGRATION_MARKER_KEY, value);
+        const key = `${MIGRATION_MARKER_KEY}:${userId}`;
+        window.localStorage.setItem(key, value);
     } catch (cause) {
         console.error('[migrationBootstrap] Failed to write migration marker', cause);
     }
 }
 
 export async function ensureMigrated(queryClient?: QueryClient): Promise<MigrationResult | null> {
-    const marker = readMarker();
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+        console.info('[migrationBootstrap] Skipping migration - user not authenticated');
+        return null;
+    }
+
+    const marker = readMarker(user.id);
     if (marker === 'ownership_mismatch') {
         console.info('[migrationBootstrap] Skipping migration due to ownership mismatch marker.');
         return null;
@@ -30,7 +41,7 @@ export async function ensureMigrated(queryClient?: QueryClient): Promise<Migrati
     try {
         const result = await runLocalStorageMigration();
         if (result.status === 'success' || result.status === 'empty') {
-            writeMarker(result.status);
+            writeMarker(user.id, result.status);
 
             // Invalidate queries to refresh data after migration
             if (queryClient) {
@@ -55,7 +66,7 @@ export async function ensureMigrated(queryClient?: QueryClient): Promise<Migrati
                     error.message.includes('cross-account'),
             );
             if (isOwnershipMismatch) {
-                writeMarker('ownership_mismatch');
+                writeMarker(user.id, 'ownership_mismatch');
                 console.warn(
                     '[migrationBootstrap] Migration skipped due to ownership mismatch - localStorage data belongs to a different user.',
                 );
