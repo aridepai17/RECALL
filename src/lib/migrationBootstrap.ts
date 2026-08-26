@@ -37,12 +37,23 @@ export async function ensureMigrated(queryClient?: QueryClient): Promise<Migrati
                 queryClient.invalidateQueries({ queryKey: ['problems'] });
                 queryClient.invalidateQueries({ queryKey: ['problem_history'] });
             }
+        } else if (result.status === 'partial') {
+            // Partial migration succeeded for some records - invalidate cache to show migrated data
+            if (queryClient) {
+                queryClient.invalidateQueries({ queryKey: ['problems'] });
+                queryClient.invalidateQueries({ queryKey: ['problem_history'] });
+            }
+            console.warn(
+                `[migrationBootstrap] Migration finished with partial success - some records migrated, will retry next boot.`,
+                result.errors,
+            );
         } else if (result.status === 'failed') {
             // Check if this is an ownership mismatch - if so, mark it to prevent repeated attempts
             const isOwnershipMismatch = result.errors.some(
                 (error) =>
                     error.message.includes('different user') ||
-                    error.message.includes('cross-account'),
+                    error.message.includes('cross-account') ||
+                    error.message.includes('without ownership marker'),
             );
             if (isOwnershipMismatch) {
                 writeMarker('ownership_mismatch');
