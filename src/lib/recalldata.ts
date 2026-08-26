@@ -68,9 +68,17 @@ function rowToHistoryEntry(row: HistoryRow): HistoryEntry {
 }
 
 async function fetchProblems(): Promise<Problem[]> {
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+        throw new Error('fetchProblems: user not authenticated');
+    }
+
     const { data, error } = await supabase
         .from('problems')
         .select()
+        .eq('user_id', user.id)
         .order('created_at', { ascending: true });
 
     if (error) {
@@ -80,9 +88,17 @@ async function fetchProblems(): Promise<Problem[]> {
 }
 
 async function fetchHistory(): Promise<HistoryEntry[]> {
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+        throw new Error('fetchHistory: user not authenticated');
+    }
+
     const { data, error } = await supabase
         .from('problem_history')
-        .select()
+        .select('*,problems!inner(user_id)')
+        .eq('problems.user_id', user.id)
         .order('created_at', { ascending: true });
 
     if (error) {
@@ -119,9 +135,17 @@ export async function addProblem(input: {
         throw new Error(`addProblem: "${input.pattern}" is not a recognized pattern.`);
     }
 
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+        throw new Error('addProblem: user not authenticated');
+    }
+
     const now = new Date().toISOString();
     const insert: ProblemInsertPayload = {
         id: crypto.randomUUID(),
+        user_id: user.id,
         name: trimmedName,
         pattern: input.pattern,
         url: input.url?.trim() ? input.url.trim() : null,
@@ -180,6 +204,9 @@ export async function commitReview(
         );
     }
 
+    // Capture the updated_at from the successful forward update for rollback guard
+    const forwardUpdatedAt = updatedRows[0]!.updated_at;
+
     const entry: HistoryInsertPayload = {
         id: crypto.randomUUID(),
         problem_id: problem.id,
@@ -203,7 +230,8 @@ export async function commitReview(
                 due_date: problem.due_date,
                 archived: problem.archived,
             })
-            .eq('id', problem.id);
+            .eq('id', problem.id)
+            .eq('updated_at', forwardUpdatedAt);
 
         if (revertError) {
             console.error(
