@@ -186,6 +186,24 @@ export async function commitReview(
         archived: next.archived,
     };
 
+    const entry: HistoryInsertPayload = {
+        id: crypto.randomUUID(),
+        problem_id: problem.id,
+        grade,
+        interval_days: next.interval_days,
+        ease_factor: next.ease_factor,
+        reviewed_on: reviewedOn,
+        created_at: new Date().toISOString(),
+    };
+
+    const { error: historyError } = await supabase.from('problem_history').insert(entry);
+
+    if (historyError) {
+        throw new Error(
+            `commitReview: failed to record history for problem ${problem.id}: ${historyError.message}`,
+        );
+    }
+
     const { data: updatedRows, error: updateError } = await supabase
         .from('problems')
         .update(update)
@@ -201,48 +219,6 @@ export async function commitReview(
     if (!updatedRows || updatedRows.length === 0) {
         throw new Error(
             `stale_write: problem ${problem.id} was modified elsewhere since it was loaded.`,
-        );
-    }
-
-    // Capture the updated_at from the successful forward update for rollback guard
-    const forwardUpdatedAt = updatedRows[0]!.updated_at;
-
-    const entry: HistoryInsertPayload = {
-        id: crypto.randomUUID(),
-        problem_id: problem.id,
-        grade,
-        interval_days: next.interval_days,
-        ease_factor: next.ease_factor,
-        reviewed_on: reviewedOn,
-        created_at: new Date().toISOString(),
-    };
-
-    const { error: historyError } = await supabase.from('problem_history').insert(entry);
-
-    if (historyError) {
-        const { data: revertedRows, error: revertError } = await supabase
-            .from('problems')
-            .update({
-                interval_days: problem.interval_days,
-                ease_factor: problem.ease_factor,
-                reps: problem.reps,
-                lapses: problem.lapses,
-                due_date: problem.due_date,
-                archived: problem.archived,
-            })
-            .eq('id', problem.id)
-            .eq('updated_at', forwardUpdatedAt)
-            .select('id');
-
-        if (revertError || !revertedRows || revertedRows.length === 0) {
-            console.error(
-                `commitReview: history insert failed for problem ${problem.id}, AND the compensating revert also failed. The problem row may now be out of sync with its history log.`,
-                revertError ?? new Error('Compensating revert matched no rows.'),
-            );
-        }
-
-        throw new Error(
-            `commitReview: failed to record history for problem ${problem.id}: ${historyError.message}`,
         );
     }
 }
