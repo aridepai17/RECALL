@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider } from '@tanstack/react-router';
 import { getRouter } from './router';
+import { ensureMigrated } from './lib/migrationBootstrap';
 import './styles.css';
 
 const rootElement = document.getElementById('root');
@@ -72,18 +73,24 @@ if (import.meta.env.DEV) {
 
 const root = ReactDOM.createRoot(rootElement);
 
-if (import.meta.env.DEV) {
-    root.render(
-        <React.StrictMode>
+async function bootstrap() {
+    await ensureMigrated();
+
+    if (import.meta.env.DEV) {
+        root.render(
+            <React.StrictMode>
+                <ErrorBoundary>
+                    <RouterProvider router={router} />
+                </ErrorBoundary>
+            </React.StrictMode>,
+        );
+    } else {
+        root.render(
             <ErrorBoundary>
                 <RouterProvider router={router} />
-            </ErrorBoundary>
-        </React.StrictMode>,
-    );
-} else {
-    root.render(
-        <ErrorBoundary>
-            <RouterProvider router={router} />
-        </ErrorBoundary>,
-    );
+            </ErrorBoundary>,
+        );
+    }
 }
+
+void bootstrap();
