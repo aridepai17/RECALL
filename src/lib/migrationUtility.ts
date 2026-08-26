@@ -392,12 +392,13 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
     const legacyProblems = readLegacyList(PROBLEMS_KEY, LegacyProblemSchema, errors);
     const legacyHistory = readLegacyList(HISTORY_KEY, LegacyHistoryEntrySchema, errors);
 
-    // Check if localStorage data belongs to current user to prevent cross-account data exposure
+    // Check if localStorage data has already been migrated to prevent cross-account data exposure.
+    // The legacy payload is browser-wide, so a single global owner marker is used instead of
+    // namespacing by user ID. Once migrated, other accounts on the same browser cannot re-migrate
+    // the same records under a different user_id.
     if (typeof window !== 'undefined' && (legacyProblems.length > 0 || legacyHistory.length > 0)) {
-        const ownerKey = `${MIGRATION_OWNER_KEY}:${user.id}`;
-        const existingOwner = window.localStorage.getItem(ownerKey);
+        const existingOwner = window.localStorage.getItem(MIGRATION_OWNER_KEY);
         if (existingOwner) {
-            // This user has already migrated their data
             return {
                 status: 'empty',
                 problemsTotal: 0,
@@ -408,10 +409,8 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
             };
         }
 
-        // Write ownership marker immediately before database writes to prevent cross-account exposure
-        // If marker write fails, abort migration to prevent leaving legacy data available for another account
         try {
-            window.localStorage.setItem(ownerKey, user.id);
+            window.localStorage.setItem(MIGRATION_OWNER_KEY, user.id);
         } catch (cause) {
             return {
                 status: 'failed',
@@ -475,8 +474,7 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
               ? 'partial'
               : 'failed';
 
-    // Note: Ownership marker is namespaced by user ID and written before database writes
-    // No need to duplicate marker write here
+    // Ownership marker is written once before database writes above; no need to duplicate here
 
     return {
         status,
