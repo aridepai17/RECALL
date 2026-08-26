@@ -40,7 +40,10 @@ export async function ensureMigrated(queryClient?: QueryClient): Promise<Migrati
 
     try {
         const result = await runLocalStorageMigration();
-        if (result.status === 'success' || result.status === 'empty') {
+        if (
+            result.status === 'success' ||
+            (result.status === 'empty' && result.errors.length === 0)
+        ) {
             writeMarker(user.id, result.status);
 
             // Invalidate queries to refresh data after migration
