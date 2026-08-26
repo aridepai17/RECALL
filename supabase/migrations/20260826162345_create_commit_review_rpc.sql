@@ -41,4 +41,5 @@ begin
 end;
 $$;
 
+revoke execute on function public.commit_review from public;
 grant execute on function public.commit_review to authenticated;
