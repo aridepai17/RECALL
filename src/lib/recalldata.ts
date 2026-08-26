@@ -220,7 +220,7 @@ export async function commitReview(
     const { error: historyError } = await supabase.from('problem_history').insert(entry);
 
     if (historyError) {
-        const { error: revertError } = await supabase
+        const { data: revertedRows, error: revertError } = await supabase
             .from('problems')
             .update({
                 interval_days: problem.interval_days,
@@ -231,12 +231,13 @@ export async function commitReview(
                 archived: problem.archived,
             })
             .eq('id', problem.id)
-            .eq('updated_at', forwardUpdatedAt);
+            .eq('updated_at', forwardUpdatedAt)
+            .select('id');
 
-        if (revertError) {
+        if (revertError || !revertedRows || revertedRows.length === 0) {
             console.error(
                 `commitReview: history insert failed for problem ${problem.id}, AND the compensating revert also failed. The problem row may now be out of sync with its history log.`,
-                revertError,
+                revertError ?? new Error('Compensating revert matched no rows.'),
             );
         }
 
