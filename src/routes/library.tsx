@@ -50,8 +50,18 @@ function healthToClass(health: 'healthy' | 'lapsed' | 'neutral'): string {
 
 function Library() {
     const today = useMemo(() => todayISO(), []);
-    const { data: problems, isPending } = useQuery(problemsQuery);
-    const { data: history, isPending: historyPending } = useQuery(historyQuery);
+    const {
+        data: problems,
+        isPending,
+        isError: problemsErrored,
+        error: problemsError,
+    } = useQuery(problemsQuery);
+    const {
+        data: history,
+        isPending: historyPending,
+        isError: historyErrored,
+        error: historyError,
+    } = useQuery(historyQuery);
 
     const [search, setSearch] = useState('');
     const [pattern, setPattern] = useState('all');
@@ -98,6 +108,7 @@ function Library() {
     }, [problems, search, pattern, sort]);
 
     const loading = isPending || historyPending;
+    const loadError = problemsErrored ? problemsError : historyErrored ? historyError : null;
 
     return (
         <main className="relative min-h-screen">
@@ -158,13 +169,19 @@ function Library() {
                     </div>
                 )}
 
-                {!loading && rows.length === 0 && (
+                {!loading && loadError && (
+                    <div className="mt-4 metric rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
+                        Couldn&apos;t load the library. {loadError.message}
+                    </div>
+                )}
+
+                {!loading && !loadError && rows.length === 0 && (
                     <div className="mt-4 metric py-8 text-[0.75rem] text-muted-foreground">
                         no matches
                     </div>
                 )}
 
-                {!loading && rows.length > 0 && (
+                {!loading && !loadError && rows.length > 0 && (
                     <div className="flex flex-col mt-6">
                         {/* Mobile Cards */}
                         <div className="flex flex-col gap-3 md:hidden">
