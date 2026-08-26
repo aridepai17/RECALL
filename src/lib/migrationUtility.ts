@@ -411,8 +411,30 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
                 ],
             };
         }
-        // Allow migration if no owner marker exists (first-time migration for existing users)
-        // The marker will be written after successful migration
+
+        // Write ownership marker immediately before database writes to prevent cross-account exposure
+        // If marker write fails, abort migration to prevent leaving legacy data available for another account
+        if (!existingOwner) {
+            try {
+                window.localStorage.setItem(MIGRATION_OWNER_KEY, user.id);
+            } catch (cause) {
+                return {
+                    status: 'failed',
+                    problemsTotal: 0,
+                    problemsMigrated: 0,
+                    historyTotal: 0,
+                    historyMigrated: 0,
+                    errors: [
+                        {
+                            stage: 'extraction',
+                            message:
+                                'Failed to write migration owner marker. Migration aborted to prevent cross-account data exposure.',
+                            cause,
+                        },
+                    ],
+                };
+            }
+        }
     }
 
     if (legacyProblems.length === 0 && legacyHistory.length === 0) {
@@ -459,14 +481,8 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
               ? 'partial'
               : 'failed';
 
-    // Mark localStorage as belonging to current user after successful migration
-    if (status === 'success' && typeof window !== 'undefined') {
-        try {
-            window.localStorage.setItem(MIGRATION_OWNER_KEY, user.id);
-        } catch (cause) {
-            console.error('[migrationUtility] Failed to write migration owner marker', cause);
-        }
-    }
+    // Note: Ownership marker is already written before database writes for first-time migrations
+    // No need to duplicate marker write here for success case
 
     return {
         status,
