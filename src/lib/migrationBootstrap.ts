@@ -52,8 +52,7 @@ export async function ensureMigrated(queryClient?: QueryClient): Promise<Migrati
             const isOwnershipMismatch = result.errors.some(
                 (error) =>
                     error.message.includes('different user') ||
-                    error.message.includes('cross-account') ||
-                    error.message.includes('without ownership marker'),
+                    error.message.includes('cross-account'),
             );
             if (isOwnershipMismatch) {
                 writeMarker('ownership_mismatch');
