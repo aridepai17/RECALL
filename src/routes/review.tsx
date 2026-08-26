@@ -21,7 +21,14 @@ import type { QueryClient } from '@tanstack/react-query';
 export const Route = createFileRoute('/review')({
     loader: async ({ context }) => {
         const queryClient = (context as { queryClient: QueryClient }).queryClient;
-        return await queryClient.ensureQueryData(problemsQuery);
+        try {
+            return await queryClient.ensureQueryData(problemsQuery);
+        } catch (error) {
+            // Allow errors to be handled by component-level error panels
+            // Prevent them from escaping to root ErrorComponent
+            console.error('[review loader] Query prefetch failed:', error);
+            return null;
+        }
     },
     head: () => ({
         meta: [
