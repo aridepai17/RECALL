@@ -73,24 +73,22 @@ if (import.meta.env.DEV) {
 
 const root = ReactDOM.createRoot(rootElement);
 
-async function bootstrap() {
-    await ensureMigrated();
-
-    if (import.meta.env.DEV) {
-        root.render(
-            <React.StrictMode>
-                <ErrorBoundary>
-                    <RouterProvider router={router} />
-                </ErrorBoundary>
-            </React.StrictMode>,
-        );
-    } else {
-        root.render(
+// Render app immediately without blocking on migration
+if (import.meta.env.DEV) {
+    root.render(
+        <React.StrictMode>
             <ErrorBoundary>
                 <RouterProvider router={router} />
-            </ErrorBoundary>,
-        );
-    }
+            </ErrorBoundary>
+        </React.StrictMode>,
+    );
+} else {
+    root.render(
+        <ErrorBoundary>
+            <RouterProvider router={router} />
+        </ErrorBoundary>,
+    );
 }
 
-void bootstrap();
+// Run migration in background without blocking initial render
+void ensureMigrated();
