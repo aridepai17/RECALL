@@ -11,10 +11,16 @@ import type { QueryClient } from '@tanstack/react-query';
 export const Route = createFileRoute('/library')({
     loader: async ({ context }) => {
         const queryClient = (context as { queryClient: QueryClient }).queryClient;
-        await Promise.all([
-            queryClient.ensureQueryData(problemsQuery),
-            queryClient.ensureQueryData(historyQuery),
-        ]);
+        try {
+            await Promise.all([
+                queryClient.ensureQueryData(problemsQuery),
+                queryClient.ensureQueryData(historyQuery),
+            ]);
+        } catch (error) {
+            // Allow errors to be handled by component-level error panels
+            // Prevent them from escaping to root ErrorComponent
+            console.error('[library loader] Query prefetch failed:', error);
+        }
     },
     head: () => ({
         meta: [
@@ -163,13 +169,13 @@ function Library() {
                     )}
                 </div>
 
-                {loading && (
+                {loading && !loadError && (
                     <div className="mt-4 metric py-8 text-[0.75rem] text-muted-foreground">
                         loading…
                     </div>
                 )}
 
-                {!loading && loadError && (
+                {loadError && (
                     <div className="mt-4 metric rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
                         Couldn&apos;t load the library. {loadError.message}
                     </div>
