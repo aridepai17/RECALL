@@ -72,7 +72,7 @@ async function fetchProblems(): Promise<Problem[]> {
         data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-        throw new Error('fetchProblems: user not authenticated');
+        return []; // Return empty array for unauthenticated users
     }
 
     const { data, error } = await supabase
@@ -92,7 +92,7 @@ async function fetchHistory(): Promise<HistoryEntry[]> {
         data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-        throw new Error('fetchHistory: user not authenticated');
+        return []; // Return empty array for unauthenticated users
     }
 
     const { data, error } = await supabase
