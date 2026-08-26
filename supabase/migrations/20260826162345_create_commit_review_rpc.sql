@@ -26,7 +26,8 @@ begin
         archived = p_archived,
         updated_at = now()
     where id = p_problem_id
-      and updated_at = p_expected_updated_at;
+      and updated_at = p_expected_updated_at
+      and user_id = auth.uid();
 
     if not found then
         raise exception 'stale_write: problem % was modified elsewhere since it was loaded.', p_problem_id;
