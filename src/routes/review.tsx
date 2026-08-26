@@ -46,7 +46,12 @@ const TRANSITION = { duration: 0.15, ease: [0.16, 1, 0.3, 1] as const };
 function ReviewEngine() {
     const [today, setToday] = useState(() => todayISO());
     const queryClient = useQueryClient();
-    const { data: problems, isPending } = useQuery(problemsQuery);
+    const {
+        data: problems,
+        isPending,
+        isError: queueErrored,
+        error: queueError,
+    } = useQuery(problemsQuery);
 
     const [graded, setGraded] = useState<Set<string>>(() => new Set());
     const [revealed, setRevealed] = useState(false);
@@ -189,6 +194,10 @@ function ReviewEngine() {
                     <span className="metric text-[0.75rem] text-muted-foreground">
                         loading queue…
                     </span>
+                ) : queueErrored ? (
+                    <div className="w-full max-w-xl rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
+                        Couldn&apos;t load today&apos;s queue. {queueError.message}
+                    </div>
                 ) : current ? (
                     <>
                         {sessionSize !== null && sessionSize > 0 && (
