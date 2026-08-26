@@ -389,8 +389,11 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
         };
     }
 
+    const legacyProblems = readLegacyList(PROBLEMS_KEY, LegacyProblemSchema, errors);
+    const legacyHistory = readLegacyList(HISTORY_KEY, LegacyHistoryEntrySchema, errors);
+
     // Check if localStorage data belongs to current user to prevent cross-account data exposure
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && (legacyProblems.length > 0 || legacyHistory.length > 0)) {
         const existingOwner = window.localStorage.getItem(MIGRATION_OWNER_KEY);
         if (existingOwner && existingOwner !== user.id) {
             return {
@@ -408,10 +411,23 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
                 ],
             };
         }
+        if (!existingOwner) {
+            return {
+                status: 'failed',
+                problemsTotal: 0,
+                problemsMigrated: 0,
+                historyTotal: 0,
+                historyMigrated: 0,
+                errors: [
+                    {
+                        stage: 'extraction',
+                        message:
+                            'localStorage data exists without ownership marker. Migration skipped to prevent cross-account data exposure on shared browsers.',
+                    },
+                ],
+            };
+        }
     }
-
-    const legacyProblems = readLegacyList(PROBLEMS_KEY, LegacyProblemSchema, errors);
-    const legacyHistory = readLegacyList(HISTORY_KEY, LegacyHistoryEntrySchema, errors);
 
     if (legacyProblems.length === 0 && legacyHistory.length === 0) {
         return {
