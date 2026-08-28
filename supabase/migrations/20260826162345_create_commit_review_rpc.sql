@@ -8,14 +8,17 @@ create or replace function public.commit_review(
     p_archived boolean,
     p_expected_updated_at timestamptz,
     p_grade smallint,
-    p_reviewed_on date,
-    p_history_created_at timestamptz
+    p_reviewed_on date
 )
 returns void
 language plpgsql
 security definer
 as $$
 begin
+    if p_reviewed_on > current_date then
+        raise exception 'reviewed_on cannot be in the future';
+    end if;
+
     update public.problems
     set
         interval_days = p_interval_days,
@@ -36,7 +39,7 @@ begin
     insert into public.problem_history (
         problem_id, grade, interval_days, ease_factor, reviewed_on, created_at
     ) values (
-        p_problem_id, p_grade, p_interval_days, p_ease_factor, p_reviewed_on, p_history_created_at
+        p_problem_id, p_grade, p_interval_days, p_ease_factor, p_reviewed_on, now()
     );
 end;
 $$;
