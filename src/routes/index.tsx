@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { problemsQuery } from '@/lib/recalldata';
+import { getCurrentUserId, problemsQuery } from '@/lib/recalldata';
 import { DashboardMechanics } from '@/components/recall/DashboardMechanics';
 import { buildDailyQueue, todayISO } from '@/lib/srs';
 import type { QueryClient } from '@tanstack/react-query';
@@ -9,7 +9,9 @@ import type { QueryClient } from '@tanstack/react-query';
 export const Route = createFileRoute('/')({
     loader: async ({ context }) => {
         const queryClient = (context as { queryClient: QueryClient }).queryClient;
-        return await queryClient.ensureQueryData(problemsQuery);
+        const userId = await getCurrentUserId();
+        if (!userId) return null;
+        return await queryClient.ensureQueryData(problemsQuery(userId));
     },
     head: () => ({
         meta: [
@@ -32,7 +34,14 @@ export const Route = createFileRoute('/')({
 
 function Dashboard() {
     const today = todayISO();
-    const { data: problems } = useQuery(problemsQuery);
+    const { data: userId } = useQuery({
+        queryKey: ['currentUser'],
+        queryFn: getCurrentUserId,
+    });
+    const { data: problems } = useQuery({
+        ...problemsQuery(userId ?? 'none'),
+        enabled: !!userId,
+    });
     const dueCount = problems ? buildDailyQueue(problems, today).length : 0;
 
     return (
