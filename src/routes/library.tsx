@@ -131,7 +131,7 @@ function Library() {
 
     const loading = userIdPending || (!!userId && (isPending || historyPending));
     const loadError = userIdError
-        ? null
+        ? userIdError
         : problemsErrored
           ? problemsError
           : historyErrored
@@ -199,7 +199,8 @@ function Library() {
 
                 {loadError && (
                     <div className="mt-4 metric rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
-                        Couldn&apos;t load the library. {loadError.message}
+                        Couldn&apos;t load the library.{' '}
+                        {loadError instanceof Error ? loadError.message : 'Unknown error'}
                     </div>
                 )}
 
