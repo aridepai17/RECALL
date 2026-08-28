@@ -126,14 +126,13 @@ export type Database = {
                     p_ease_factor: number;
                     p_expected_updated_at: string;
                     p_grade: number;
-                    p_history_created_at: string;
                     p_interval_days: number;
                     p_lapses: number;
                     p_problem_id: string;
                     p_reps: number;
                     p_reviewed_on: string;
                 };
-                Returns: void;
+                Returns: undefined;
             };
         };
         Enums: {
