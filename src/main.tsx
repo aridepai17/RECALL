@@ -15,7 +15,8 @@ if (!rootElement) {
 const router = getRouter();
 
 // Setup auth state change handler to clear user-scoped caches on sign in/out
-setupAuthStateChangeHandler(router.options.context.queryClient);
+// and retry migration when a user signs in after initial load
+setupAuthStateChangeHandler(router.options.context.queryClient, ensureMigrated);
 
 class ErrorBoundary extends React.Component<
     { children: React.ReactNode },
