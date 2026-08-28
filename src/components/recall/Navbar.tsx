@@ -80,7 +80,12 @@ export function Navbar() {
                 style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
             >
                 <div className="metric mx-auto flex h-14 max-w-5xl items-stretch">
-                    <BottomTab to="/review" label="review" exact badge={dueCount} />
+                    <BottomTab
+                        to="/review"
+                        label="review"
+                        exact
+                        badge={hasError ? undefined : dueCount}
+                    />
                     <BottomTab to="/library" label="library" />
                 </div>
             </nav>
