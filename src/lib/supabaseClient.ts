@@ -26,7 +26,10 @@ export const supabase: SupabaseClient<Database> = createClient<Database>(
 
 let authStateListener: { data: { subscription: { unsubscribe: () => void } } } | null = null;
 
-export function setupAuthStateChangeHandler(queryClient: QueryClient, onSignIn?: () => void) {
+export function setupAuthStateChangeHandler(
+    queryClient: QueryClient,
+    onSignIn?: (queryClient: QueryClient) => void,
+) {
     if (authStateListener) {
         authStateListener.data.subscription.unsubscribe();
     }
@@ -41,7 +44,7 @@ export function setupAuthStateChangeHandler(queryClient: QueryClient, onSignIn?:
         }
 
         if (event === 'SIGNED_IN' && session?.user) {
-            onSignIn?.();
+            onSignIn?.(queryClient);
         }
     });
 }
