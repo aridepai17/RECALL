@@ -8,7 +8,7 @@ export function Navbar() {
     const today = todayISO();
     const {
         data: userId,
-        isPending: _userIdPending,
+        isPending: userIdPending,
         isError: userIdError,
     } = useQuery({
         queryKey: ['currentUser'],
@@ -16,7 +16,7 @@ export function Navbar() {
     });
     const {
         data: problems,
-        isPending: _problemsPending,
+        isPending: problemsPending,
         isError: problemsError,
     } = useQuery({
         ...problemsQuery(userId ?? 'none'),
@@ -25,12 +25,13 @@ export function Navbar() {
     const hasMounted = useHasMounted();
 
     const hasError = userIdError || problemsError;
+    const isLoading = userIdPending || (!!userId && problemsPending);
 
     const dueCount = hasMounted && problems ? buildDailyQueue(problems, today).length : 0;
     const totalCount = hasMounted ? (problems?.length ?? 0) : 0;
 
-    const displayDueCount = hasError ? '--' : String(dueCount).padStart(2, '0');
-    const displayTotalCount = hasError ? '--' : String(totalCount).padStart(2, '0');
+    const displayDueCount = hasError || isLoading ? '--' : String(dueCount).padStart(2, '0');
+    const displayTotalCount = hasError || isLoading ? '--' : String(totalCount).padStart(2, '0');
 
     return (
         <>
@@ -84,7 +85,7 @@ export function Navbar() {
                         to="/review"
                         label="review"
                         exact
-                        badge={hasError ? undefined : dueCount}
+                        badge={hasError || isLoading ? undefined : dueCount}
                     />
                     <BottomTab to="/library" label="library" />
                 </div>
