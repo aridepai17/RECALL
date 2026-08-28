@@ -3,7 +3,13 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useState, type SubmitEvent } from 'react';
-import { PATTERNS, addProblem, commitReview, problemsQuery } from '@/lib/recalldata';
+import {
+    PATTERNS,
+    addProblem,
+    commitReview,
+    getCurrentUserId,
+    problemsQuery,
+} from '@/lib/recalldata';
 import {
     GRADES,
     GRADE_HINTS,
@@ -22,7 +28,9 @@ export const Route = createFileRoute('/review')({
     loader: async ({ context }) => {
         const queryClient = (context as { queryClient: QueryClient }).queryClient;
         try {
-            return await queryClient.ensureQueryData(problemsQuery);
+            const userId = await getCurrentUserId();
+            if (!userId) return null;
+            return await queryClient.ensureQueryData(problemsQuery(userId));
         } catch (error) {
             // Allow errors to be handled by component-level error panels
             // Prevent them from escaping to root ErrorComponent
@@ -53,12 +61,19 @@ const TRANSITION = { duration: 0.15, ease: [0.16, 1, 0.3, 1] as const };
 function ReviewEngine() {
     const [today, setToday] = useState(() => todayISO());
     const queryClient = useQueryClient();
+    const { data: userId } = useQuery({
+        queryKey: ['currentUser'],
+        queryFn: getCurrentUserId,
+    });
     const {
         data: problems,
         isPending,
         isError: queueErrored,
         error: queueError,
-    } = useQuery(problemsQuery);
+    } = useQuery({
+        ...problemsQuery(userId ?? 'none'),
+        enabled: !!userId,
+    });
 
     const [graded, setGraded] = useState<Set<string>>(() => new Set());
     const [revealed, setRevealed] = useState(false);
@@ -149,8 +164,10 @@ function ReviewEngine() {
             );
         },
         onSettled: () => {
-            void queryClient.invalidateQueries({ queryKey: problemsQuery.queryKey });
-            void queryClient.invalidateQueries({ queryKey: ['problem_history'] });
+            if (userId) {
+                void queryClient.invalidateQueries({ queryKey: ['problems', userId] });
+                void queryClient.invalidateQueries({ queryKey: ['problem_history', userId] });
+            }
         },
     });
 
@@ -260,7 +277,7 @@ function ReviewEngine() {
                                                 <button
                                                     key={g}
                                                     onClick={() => grade(g)}
-                                                    className="metric group flex min-h-[44px] items-center gap-4 rounded-md px-3 py-3 text-left ring-1 ring-border transition-colors duration-150 ease-out hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                                    className="metric group flex min-h-11 items-center gap-4 rounded-md px-3 py-3 text-left ring-1 ring-border transition-colors duration-150 ease-out hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                                 >
                                                     <kbd className="kbd-chip">{g}</kbd>
                                                     <span
@@ -285,7 +302,7 @@ function ReviewEngine() {
                                     ) : (
                                         <button
                                             onClick={() => setRevealed(true)}
-                                            className="metric flex min-h-[44px] w-full items-center justify-between rounded-md px-3 py-3 ring-1 ring-border transition-colors duration-150 ease-out hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                            className="metric flex min-h-11 w-full items-center justify-between rounded-md px-3 py-3 ring-1 ring-border transition-colors duration-150 ease-out hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                         >
                                             <span className="text-sm text-muted-foreground">
                                                 Reconstruct the solution, then grade the friction
@@ -307,6 +324,10 @@ function ReviewEngine() {
 
 function QueueClear() {
     const queryClient = useQueryClient();
+    const { data: userId } = useQuery({
+        queryKey: ['currentUser'],
+        queryFn: getCurrentUserId,
+    });
     const [name, setName] = useState('');
     const [pattern, setPattern] = useState<string>(PATTERNS[0]);
     const [url, setUrl] = useState('');
@@ -317,7 +338,9 @@ function QueueClear() {
         onSuccess: () => {
             setName('');
             setUrl('');
-            void queryClient.invalidateQueries({ queryKey: problemsQuery.queryKey });
+            if (userId) {
+                void queryClient.invalidateQueries({ queryKey: ['problems', userId] });
+            }
         },
     });
 
