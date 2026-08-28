@@ -102,7 +102,8 @@ function isValidPattern(value: string): value is ProblemPattern {
 
 const VALID_GRADES = new Set<number>(GRADES);
 
-export type MigrationStage = 'extraction' | 'problems_upsert' | 'history_upsert';
+export type MigrationStage =
+    'extraction' | 'problems_upsert' | 'history_upsert' | 'ownership_claim';
 
 export interface MigrationError {
     stage: MigrationStage;
@@ -398,7 +399,7 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
     // the same records under a different user_id.
     if (typeof window !== 'undefined' && (legacyProblems.length > 0 || legacyHistory.length > 0)) {
         const existingOwner = window.localStorage.getItem(MIGRATION_OWNER_KEY);
-        if (existingOwner) {
+        if (existingOwner && existingOwner !== user.id) {
             return {
                 status: 'empty',
                 problemsTotal: 0,
@@ -406,6 +407,26 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
                 historyTotal: 0,
                 historyMigrated: 0,
                 errors: [],
+            };
+        }
+
+        // Claim ownership before starting migration to prevent race conditions
+        try {
+            window.localStorage.setItem(MIGRATION_OWNER_KEY, user.id);
+        } catch (error) {
+            return {
+                status: 'failed',
+                problemsTotal: 0,
+                problemsMigrated: 0,
+                historyTotal: 0,
+                historyMigrated: 0,
+                errors: [
+                    {
+                        stage: 'ownership_claim',
+                        message: 'Failed to claim migration ownership in localStorage',
+                        cause: error,
+                    },
+                ],
             };
         }
     }
@@ -453,14 +474,6 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
             : problemsMigrated > 0 || historyMigrated > 0
               ? 'partial'
               : 'failed';
-
-    if (status === 'success' && typeof window !== 'undefined') {
-        try {
-            window.localStorage.setItem(MIGRATION_OWNER_KEY, user.id);
-        } catch {
-            // Marker write failure is non-blocking after successful migration
-        }
-    }
 
     return {
         status,
