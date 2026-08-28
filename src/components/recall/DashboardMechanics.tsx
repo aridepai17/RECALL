@@ -3,7 +3,7 @@ import { motion, useMotionTemplate, useMotionValue } from 'motion/react';
 import { Terminal, Gauge, TrendingDown, Archive } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { scheduleNextReview, buildDailyQueue, todayISO, type Grade } from '@/lib/srs';
-import { problemsQuery } from '@/lib/recalldata';
+import { getCurrentUserId, problemsQuery } from '@/lib/recalldata';
 import { cn } from '@/lib/utils';
 
 function SpotlightCard({
@@ -129,7 +129,7 @@ function FrictionSwitch({ friction }: { friction: FrictionItem[] }) {
                         onPointerLeave={() => setActive(null)}
                         onBlur={() => setActive(null)}
                         className={cn(
-                            'metric h-10 min-h-[44px] rounded-md text-[13px] tabular-nums ring-1 transition-all duration-150 ease-out',
+                            'metric h-10 min-h-11 rounded-md text-[13px] tabular-nums ring-1 transition-all duration-150 ease-out',
                             active === index
                                 ? cn(grade.cls, '-translate-y-0.5')
                                 : 'bg-white/[0.04] text-muted-foreground ring-border',
@@ -333,7 +333,14 @@ function ArchiveTimeline() {
 }
 
 export function DashboardMechanics() {
-    const { data: problems = [] } = useQuery(problemsQuery);
+    const { data: userId } = useQuery({
+        queryKey: ['currentUser'],
+        queryFn: getCurrentUserId,
+    });
+    const { data: problems = [] } = useQuery({
+        ...problemsQuery(userId ?? 'none'),
+        enabled: !!userId,
+    });
     const today = todayISO();
 
     // Pull the real queue and grab the first due problem
