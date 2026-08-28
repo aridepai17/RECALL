@@ -44,7 +44,7 @@ export function setupAuthStateChangeHandler(
         }
 
         if (event === 'SIGNED_IN' && session?.user) {
-            onSignIn?.(queryClient);
+            setTimeout(() => onSignIn?.(queryClient), 0);
         }
     });
 }
