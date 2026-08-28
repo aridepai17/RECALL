@@ -21,6 +21,13 @@ export const PATTERNS = [
     'Math & Geometry',
 ] as const;
 
+export async function getCurrentUserId(): Promise<string | null> {
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+    return user?.id ?? null;
+}
+
 type ProblemPattern = Database['public']['Enums']['problem_pattern'];
 type ProblemRow = Database['public']['Tables']['problems']['Row'];
 type ProblemInsertPayload = Database['public']['Tables']['problems']['Insert'];
@@ -65,18 +72,11 @@ function rowToHistoryEntry(row: HistoryRow): HistoryEntry {
     };
 }
 
-async function fetchProblems(): Promise<Problem[]> {
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-        return []; // Return empty array for unauthenticated users
-    }
-
+async function fetchProblems(userId: string): Promise<Problem[]> {
     const { data, error } = await supabase
         .from('problems')
         .select()
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: true });
 
     if (error) {
@@ -85,18 +85,11 @@ async function fetchProblems(): Promise<Problem[]> {
     return (data ?? []).map(rowToProblem);
 }
 
-async function fetchHistory(): Promise<HistoryEntry[]> {
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-        return []; // Return empty array for unauthenticated users
-    }
-
+async function fetchHistory(userId: string): Promise<HistoryEntry[]> {
     const { data, error } = await supabase
         .from('problem_history')
         .select('*,problems!inner(user_id)')
-        .eq('problems.user_id', user.id)
+        .eq('problems.user_id', userId)
         .order('created_at', { ascending: true });
 
     if (error) {
@@ -105,19 +98,25 @@ async function fetchHistory(): Promise<HistoryEntry[]> {
     return (data ?? []).map(rowToHistoryEntry);
 }
 
-export const problemsQuery = {
-    queryKey: ['problems'] as const,
-    queryFn: fetchProblems,
-};
-
-export async function loadProblems(): Promise<Problem[]> {
-    return fetchProblems();
+export function problemsQuery(userId: string) {
+    return {
+        queryKey: ['problems', userId] as const,
+        queryFn: () => fetchProblems(userId),
+    };
 }
 
-export const historyQuery = {
-    queryKey: ['problem_history'] as const,
-    queryFn: fetchHistory,
-};
+export async function loadProblems(): Promise<Problem[]> {
+    const userId = await getCurrentUserId();
+    if (!userId) return [];
+    return fetchProblems(userId);
+}
+
+export function historyQuery(userId: string) {
+    return {
+        queryKey: ['problem_history', userId] as const,
+        queryFn: () => fetchHistory(userId),
+    };
+}
 
 export async function addProblem(input: {
     name: string;
@@ -175,8 +174,6 @@ export async function commitReview(
     next: ScheduleResult,
     reviewedOn: string,
 ): Promise<void> {
-    const historyCreatedAt = new Date().toISOString();
-
     const { error } = await supabase.rpc('commit_review', {
         p_problem_id: problem.id,
         p_interval_days: next.interval_days,
@@ -188,7 +185,6 @@ export async function commitReview(
         p_expected_updated_at: problem.updated_at,
         p_grade: grade,
         p_reviewed_on: reviewedOn,
-        p_history_created_at: historyCreatedAt,
     });
 
     if (error) {
