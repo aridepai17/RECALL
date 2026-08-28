@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { ExternalLink, Search } from 'lucide-react';
 import { FilterSelect, Sparkline } from '@/components';
-import { historyQuery, problemsQuery } from '@/lib/recalldata';
+import { getCurrentUserId, historyQuery, problemsQuery } from '@/lib/recalldata';
 import { formatDue, healthOf, todayISO, type Problem } from '@/lib/srs';
 import type { QueryClient } from '@tanstack/react-query';
 
@@ -12,9 +12,11 @@ export const Route = createFileRoute('/library')({
     loader: async ({ context }) => {
         const queryClient = (context as { queryClient: QueryClient }).queryClient;
         try {
+            const userId = await getCurrentUserId();
+            if (!userId) return;
             await Promise.all([
-                queryClient.ensureQueryData(problemsQuery),
-                queryClient.ensureQueryData(historyQuery),
+                queryClient.ensureQueryData(problemsQuery(userId)),
+                queryClient.ensureQueryData(historyQuery(userId)),
             ]);
         } catch (error) {
             // Allow errors to be handled by component-level error panels
@@ -56,18 +58,28 @@ function healthToClass(health: 'healthy' | 'lapsed' | 'neutral'): string {
 
 function Library() {
     const today = useMemo(() => todayISO(), []);
+    const { data: userId } = useQuery({
+        queryKey: ['currentUser'],
+        queryFn: getCurrentUserId,
+    });
     const {
         data: problems,
         isPending,
         isError: problemsErrored,
         error: problemsError,
-    } = useQuery(problemsQuery);
+    } = useQuery({
+        ...problemsQuery(userId ?? 'none'),
+        enabled: !!userId,
+    });
     const {
         data: history,
         isPending: historyPending,
         isError: historyErrored,
         error: historyError,
-    } = useQuery(historyQuery);
+    } = useQuery({
+        ...historyQuery(userId ?? 'none'),
+        enabled: !!userId,
+    });
 
     const [search, setSearch] = useState('');
     const [pattern, setPattern] = useState('all');
