@@ -367,27 +367,31 @@ async function upsertHistoryChunked(
     return migrated;
 }
 
-export async function runLocalStorageMigration(): Promise<MigrationResult> {
+export async function runLocalStorageMigration(userId?: string): Promise<MigrationResult> {
     const errors: MigrationError[] = [];
 
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-        return {
-            status: 'failed',
-            problemsTotal: 0,
-            problemsMigrated: 0,
-            historyTotal: 0,
-            historyMigrated: 0,
-            errors: [
-                {
-                    stage: 'extraction',
-                    message:
-                        'User not authenticated. Migration requires authentication to assign user_id to migrated records.',
-                },
-            ],
-        };
+    let resolvedUserId = userId;
+    if (!resolvedUserId) {
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) {
+            return {
+                status: 'failed',
+                problemsTotal: 0,
+                problemsMigrated: 0,
+                historyTotal: 0,
+                historyMigrated: 0,
+                errors: [
+                    {
+                        stage: 'extraction',
+                        message:
+                            'User not authenticated. Migration requires authentication to assign user_id to migrated records.',
+                    },
+                ],
+            };
+        }
+        resolvedUserId = user.id;
     }
 
     const legacyProblems = readLegacyList(PROBLEMS_KEY, LegacyProblemSchema, errors);
@@ -399,7 +403,7 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
     // the same records under a different user_id.
     if (typeof window !== 'undefined' && (legacyProblems.length > 0 || legacyHistory.length > 0)) {
         const existingOwner = window.localStorage.getItem(MIGRATION_OWNER_KEY);
-        if (existingOwner && existingOwner !== user.id) {
+        if (existingOwner && existingOwner !== resolvedUserId) {
             return {
                 status: 'empty',
                 problemsTotal: 0,
@@ -412,7 +416,7 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
 
         // Claim ownership before starting migration to prevent race conditions
         try {
-            window.localStorage.setItem(MIGRATION_OWNER_KEY, user.id);
+            window.localStorage.setItem(MIGRATION_OWNER_KEY, resolvedUserId);
         } catch (error) {
             return {
                 status: 'failed',
@@ -444,7 +448,9 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
 
     const resolved = (
         await Promise.all(
-            legacyProblems.map(async (legacy) => await toProblemInsert(legacy, user.id, errors)),
+            legacyProblems.map(
+                async (legacy) => await toProblemInsert(legacy, resolvedUserId, errors),
+            ),
         )
     ).filter((r): r is ResolvedProblem => r !== null);
 
