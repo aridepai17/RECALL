@@ -351,7 +351,7 @@ export function DashboardMechanics() {
     });
     const today = todayISO();
 
-    const hasError = (userIdError && userId != null) || isError;
+    const hasError = userIdError || isError;
 
     // Pull the real queue and grab the first due problem
     const queue = useMemo(() => buildDailyQueue(problems, today), [problems, today]);
