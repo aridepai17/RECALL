@@ -61,7 +61,11 @@ const TRANSITION = { duration: 0.15, ease: [0.16, 1, 0.3, 1] as const };
 function ReviewEngine() {
     const [today, setToday] = useState(() => todayISO());
     const queryClient = useQueryClient();
-    const { data: userId, isPending: userIdPending } = useQuery({
+    const {
+        data: userId,
+        isPending: userIdPending,
+        isError: userIdError,
+    } = useQuery({
         queryKey: ['currentUser'],
         queryFn: getCurrentUserId,
     });
@@ -139,6 +143,8 @@ function ReviewEngine() {
     const current = queue[0];
     const completedCount = sessionSize !== null ? sessionSize - queue.length : 0;
 
+    const loadError = userIdError ? userIdError : queueErrored ? queueError : null;
+
     const commitMutation = useMutation({
         mutationFn: async ({ problem, gradeValue }: { problem: Problem; gradeValue: Grade }) => {
             const activeToday = todayISO();
@@ -214,14 +220,15 @@ function ReviewEngine() {
                     </div>
                 )}
 
-                {(userIdPending || (!!userId && isPending)) && !queueErrored ? (
+                {loadError ? (
+                    <div className="w-full max-w-xl rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
+                        Couldn&apos;t load today&apos;s queue.{' '}
+                        {loadError instanceof Error ? loadError.message : 'Unknown error'}
+                    </div>
+                ) : userIdPending || (!!userId && isPending) ? (
                     <span className="metric text-[0.75rem] text-muted-foreground">
                         loading queue…
                     </span>
-                ) : queueErrored ? (
-                    <div className="w-full max-w-xl rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
-                        Couldn&apos;t load today&apos;s queue. {queueError.message}
-                    </div>
                 ) : current ? (
                     <>
                         {sessionSize !== null && sessionSize > 0 && (
