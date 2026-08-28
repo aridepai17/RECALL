@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { RouterProvider } from '@tanstack/react-router';
 import { getRouter } from './router';
 import { ensureMigrated } from './lib/migrationBootstrap';
+import { setupAuthStateChangeHandler } from './lib/supabaseClient';
 import './styles.css';
 
 const rootElement = document.getElementById('root');
@@ -12,6 +13,9 @@ if (!rootElement) {
 }
 
 const router = getRouter();
+
+// Setup auth state change handler to clear user-scoped caches on sign in/out
+setupAuthStateChangeHandler(router.options.context.queryClient);
 
 class ErrorBoundary extends React.Component<
     { children: React.ReactNode },
