@@ -61,7 +61,7 @@ const TRANSITION = { duration: 0.15, ease: [0.16, 1, 0.3, 1] as const };
 function ReviewEngine() {
     const [today, setToday] = useState(() => todayISO());
     const queryClient = useQueryClient();
-    const { data: userId } = useQuery({
+    const { data: userId, isPending: userIdPending } = useQuery({
         queryKey: ['currentUser'],
         queryFn: getCurrentUserId,
     });
@@ -214,7 +214,7 @@ function ReviewEngine() {
                     </div>
                 )}
 
-                {isPending && !queueErrored ? (
+                {(userIdPending || (!!userId && isPending)) && !queueErrored ? (
                     <span className="metric text-[0.75rem] text-muted-foreground">
                         loading queue…
                     </span>
