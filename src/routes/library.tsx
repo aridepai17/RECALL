@@ -58,7 +58,11 @@ function healthToClass(health: 'healthy' | 'lapsed' | 'neutral'): string {
 
 function Library() {
     const today = useMemo(() => todayISO(), []);
-    const { data: userId } = useQuery({
+    const {
+        data: userId,
+        isPending: userIdPending,
+        isError: userIdError,
+    } = useQuery({
         queryKey: ['currentUser'],
         queryFn: getCurrentUserId,
     });
@@ -125,8 +129,14 @@ function Library() {
         return [...filtered].sort(compare);
     }, [problems, search, pattern, sort]);
 
-    const loading = isPending || historyPending;
-    const loadError = problemsErrored ? problemsError : historyErrored ? historyError : null;
+    const loading = userIdPending || (!!userId && (isPending || historyPending));
+    const loadError = userIdError
+        ? null
+        : problemsErrored
+          ? problemsError
+          : historyErrored
+            ? historyError
+            : null;
 
     return (
         <main className="relative min-h-screen">
