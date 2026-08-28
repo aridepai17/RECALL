@@ -333,7 +333,11 @@ function ArchiveTimeline() {
 }
 
 export function DashboardMechanics() {
-    const { data: userId } = useQuery({
+    const {
+        data: userId,
+        isError: userIdError,
+        error: userIdQueryError,
+    } = useQuery({
         queryKey: ['currentUser'],
         queryFn: getCurrentUserId,
     });
@@ -347,7 +351,7 @@ export function DashboardMechanics() {
     });
     const today = todayISO();
 
-    const hasError = isError && userId != null;
+    const hasError = (userIdError && userId != null) || isError;
 
     // Pull the real queue and grab the first due problem
     const queue = useMemo(() => buildDailyQueue(problems, today), [problems, today]);
@@ -412,7 +416,11 @@ export function DashboardMechanics() {
             {hasError && (
                 <div className="rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
                     Couldn&apos;t load mechanics preview.{' '}
-                    {error instanceof Error ? error.message : 'Unknown error'}
+                    {userIdError && userIdQueryError instanceof Error
+                        ? userIdQueryError.message
+                        : error instanceof Error
+                          ? error.message
+                          : 'Unknown error'}
                 </div>
             )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
