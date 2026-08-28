@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { QueryClient } from '@tanstack/react-query';
 import type { Database } from './database.types';
 
 function requireEnv(value: string | undefined, name: string): string {
@@ -22,3 +23,20 @@ export const supabase: SupabaseClient<Database> = createClient<Database>(
     supabaseUrl,
     supabaseAnonKey,
 );
+
+let authStateListener: { data: { subscription: { unsubscribe: () => void } } } | null = null;
+
+export function setupAuthStateChangeHandler(queryClient: QueryClient) {
+    if (authStateListener) {
+        authStateListener.data.subscription.unsubscribe();
+    }
+
+    authStateListener = supabase.auth.onAuthStateChange((event, _session) => {
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+            // Clear all user-scoped query caches on auth state changes
+            queryClient.invalidateQueries({ queryKey: ['currentUser'] });
+            queryClient.invalidateQueries({ queryKey: ['problems'] });
+            queryClient.invalidateQueries({ queryKey: ['problem_history'] });
+        }
+    });
+}
