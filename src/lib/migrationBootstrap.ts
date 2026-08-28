@@ -39,7 +39,7 @@ export async function ensureMigrated(queryClient?: QueryClient): Promise<Migrati
     if (marker !== null) return null;
 
     try {
-        const result = await runLocalStorageMigration();
+        const result = await runLocalStorageMigration(user.id);
         if (
             result.status === 'success' ||
             (result.status === 'empty' && result.errors.length === 0)
