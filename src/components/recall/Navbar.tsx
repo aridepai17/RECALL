@@ -6,18 +6,31 @@ import { useHasMounted } from '@/hooks/useHasMounted';
 
 export function Navbar() {
     const today = todayISO();
-    const { data: userId } = useQuery({
+    const {
+        data: userId,
+        isPending: _userIdPending,
+        isError: userIdError,
+    } = useQuery({
         queryKey: ['currentUser'],
         queryFn: getCurrentUserId,
     });
-    const { data: problems } = useQuery({
+    const {
+        data: problems,
+        isPending: _problemsPending,
+        isError: problemsError,
+    } = useQuery({
         ...problemsQuery(userId ?? 'none'),
         enabled: !!userId,
     });
     const hasMounted = useHasMounted();
 
+    const hasError = userIdError || problemsError;
+
     const dueCount = hasMounted && problems ? buildDailyQueue(problems, today).length : 0;
     const totalCount = hasMounted ? (problems?.length ?? 0) : 0;
+
+    const displayDueCount = hasError ? '--' : String(dueCount).padStart(2, '0');
+    const displayTotalCount = hasError ? '--' : String(totalCount).padStart(2, '0');
 
     return (
         <>
@@ -40,8 +53,14 @@ export function Navbar() {
 
                     <div className="metric flex items-center gap-3 text-[0.7rem] tabular-nums">
                         <span className="flex items-baseline gap-1.5">
-                            <span className={dueCount > 0 ? 'text-foreground' : 'text-neutral-600'}>
-                                {String(dueCount).padStart(2, '0')}
+                            <span
+                                className={
+                                    dueCount > 0 && !hasError
+                                        ? 'text-foreground'
+                                        : 'text-neutral-600'
+                                }
+                            >
+                                {displayDueCount}
                             </span>
                             <span className="text-neutral-600">due</span>
                         </span>
@@ -49,9 +68,7 @@ export function Navbar() {
                         <span aria-hidden className="h-3 w-px bg-white/[0.08]" />
 
                         <span className="flex items-baseline gap-1.5">
-                            <span className="text-neutral-400">
-                                {String(totalCount).padStart(2, '0')}
-                            </span>
+                            <span className="text-neutral-400">{displayTotalCount}</span>
                             <span className="text-neutral-600">tracked</span>
                         </span>
                     </div>
