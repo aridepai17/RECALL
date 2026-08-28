@@ -31,12 +31,13 @@ export function setupAuthStateChangeHandler(queryClient: QueryClient) {
         authStateListener.data.subscription.unsubscribe();
     }
 
-    authStateListener = supabase.auth.onAuthStateChange((event, _session) => {
+    authStateListener = supabase.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-            // Clear all user-scoped query caches on auth state changes
-            queryClient.invalidateQueries({ queryKey: ['currentUser'] });
-            queryClient.invalidateQueries({ queryKey: ['problems'] });
-            queryClient.invalidateQueries({ queryKey: ['problem_history'] });
+            // Set currentUser query data to session.user.id or null
+            queryClient.setQueryData(['currentUser'], session?.user.id ?? null);
+            // Remove user-scoped queries instead of invalidating them
+            queryClient.removeQueries({ queryKey: ['problems'] });
+            queryClient.removeQueries({ queryKey: ['problem_history'] });
         }
     });
 }
