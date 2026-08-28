@@ -26,7 +26,7 @@ export const supabase: SupabaseClient<Database> = createClient<Database>(
 
 let authStateListener: { data: { subscription: { unsubscribe: () => void } } } | null = null;
 
-export function setupAuthStateChangeHandler(queryClient: QueryClient) {
+export function setupAuthStateChangeHandler(queryClient: QueryClient, onSignIn?: () => void) {
     if (authStateListener) {
         authStateListener.data.subscription.unsubscribe();
     }
@@ -38,6 +38,10 @@ export function setupAuthStateChangeHandler(queryClient: QueryClient) {
             // Remove user-scoped queries instead of invalidating them
             queryClient.removeQueries({ queryKey: ['problems'] });
             queryClient.removeQueries({ queryKey: ['problem_history'] });
+        }
+
+        if (event === 'SIGNED_IN' && session?.user) {
+            onSignIn?.();
         }
     });
 }
