@@ -1,12 +1,19 @@
 import { Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { problemsQuery } from '@/lib/recalldata';
+import { getCurrentUserId, problemsQuery } from '@/lib/recalldata';
 import { buildDailyQueue, todayISO } from '@/lib/srs';
 import { useHasMounted } from '@/hooks/useHasMounted';
 
 export function Navbar() {
     const today = todayISO();
-    const { data: problems } = useQuery(problemsQuery);
+    const { data: userId } = useQuery({
+        queryKey: ['currentUser'],
+        queryFn: getCurrentUserId,
+    });
+    const { data: problems } = useQuery({
+        ...problemsQuery(userId ?? 'none'),
+        enabled: !!userId,
+    });
     const hasMounted = useHasMounted();
 
     const dueCount = hasMounted && problems ? buildDailyQueue(problems, today).length : 0;
@@ -19,7 +26,7 @@ export function Navbar() {
                     <div className="flex items-center gap-8 sm:gap-10">
                         <Link
                             to="/"
-                            className="metric flex min-h-[44px] items-center text-[0.75rem] uppercase tracking-[0.28em] text-foreground transition-colors duration-150 ease-out hover:text-primary"
+                            className="metric flex min-h-11 items-center text-[0.75rem] uppercase tracking-[0.28em] text-foreground transition-colors duration-150 ease-out hover:text-primary"
                         >
                             recall<span className="text-primary">.</span>
                         </Link>
@@ -69,7 +76,7 @@ function NavTab({ to, label, exact }: { to: string; label: string; exact?: boole
         <Link
             to={to}
             {...(exact && { activeOptions: { exact: true } })}
-            className="metric relative flex min-h-[44px] items-center py-1 text-[0.8rem] uppercase tracking-wider text-neutral-300 transition-colors duration-150 ease-out hover:text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-white/40"
+            className="metric relative flex min-h-11 items-center py-1 text-[0.8rem] uppercase tracking-wider text-neutral-300 transition-colors duration-150 ease-out hover:text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-white/40"
             activeProps={{
                 className:
                     'text-foreground after:absolute after:inset-x-0 after:-bottom-[1px] after:h-px after:bg-foreground',
