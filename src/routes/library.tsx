@@ -62,6 +62,7 @@ function Library() {
         data: userId,
         isPending: userIdPending,
         isError: userIdError,
+        error: userIdQueryError,
     } = useQuery({
         queryKey: ['currentUser'],
         queryFn: getCurrentUserId,
@@ -131,7 +132,7 @@ function Library() {
 
     const loading = userIdPending || (!!userId && (isPending || historyPending));
     const loadError = userIdError
-        ? userIdError
+        ? userIdQueryError
         : problemsErrored
           ? problemsError
           : historyErrored
