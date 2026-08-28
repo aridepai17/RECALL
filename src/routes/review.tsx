@@ -65,6 +65,7 @@ function ReviewEngine() {
         data: userId,
         isPending: userIdPending,
         isError: userIdError,
+        error: userIdQueryError,
     } = useQuery({
         queryKey: ['currentUser'],
         queryFn: getCurrentUserId,
@@ -83,6 +84,13 @@ function ReviewEngine() {
     const [revealed, setRevealed] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sessionSize, setSessionSize] = useState<number | null>(null);
+
+    useEffect(() => {
+        setGraded(new Set());
+        setRevealed(false);
+        setSessionSize(null);
+        setError(null);
+    }, [userId]);
 
     // Keep 'today' fresh exactly at midnight, on focus, and check frequently for drift
     useEffect(() => {
@@ -143,7 +151,7 @@ function ReviewEngine() {
     const current = queue[0];
     const completedCount = sessionSize !== null ? sessionSize - queue.length : 0;
 
-    const loadError = userIdError ? userIdError : queueErrored ? queueError : null;
+    const loadError = userIdError ? userIdQueryError : queueErrored ? queueError : null;
 
     const commitMutation = useMutation({
         mutationFn: async ({ problem, gradeValue }: { problem: Problem; gradeValue: Grade }) => {
@@ -321,8 +329,12 @@ function ReviewEngine() {
                             </motion.section>
                         </AnimatePresence>
                     </>
-                ) : (
+                ) : userId ? (
                     <QueueClear />
+                ) : (
+                    <div className="w-full max-w-xl rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
+                        Please sign in to add problems.
+                    </div>
                 )}
             </div>
         </main>
