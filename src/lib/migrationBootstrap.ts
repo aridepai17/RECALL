@@ -25,9 +25,20 @@ function writeMarker(userId: string, value: MigrationMarker): void {
 }
 
 export async function ensureMigrated(queryClient?: QueryClient): Promise<MigrationResult | null> {
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
+    let user: { id: string } | null;
+    try {
+        const {
+            data: { user: fetchedUser },
+        } = await supabase.auth.getUser();
+        user = fetchedUser;
+    } catch (cause) {
+        console.error(
+            '[migrationBootstrap] Migration threw unexpectedly - app will still boot',
+            cause,
+        );
+        return null;
+    }
+
     if (!user) {
         console.info('[migrationBootstrap] Skipping migration - user not authenticated');
         return null;
