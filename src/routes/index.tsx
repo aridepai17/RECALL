@@ -50,7 +50,9 @@ function Dashboard() {
         enabled: !!userId,
     });
     const dueCount =
-        userIdError || problemsError ? '—' : problems ? buildDailyQueue(problems, today).length : 0;
+        userIdError || problemsError || !userId || !problems
+            ? '—'
+            : buildDailyQueue(problems, today).length;
 
     return (
         <main className="relative min-h-screen overflow-hidden">
