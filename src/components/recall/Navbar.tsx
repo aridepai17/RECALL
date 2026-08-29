@@ -26,12 +26,15 @@ export function Navbar() {
 
     const hasError = userIdError || problemsError;
     const isLoading = userIdPending || (!!userId && problemsPending);
+    const isUnauthenticated = !userId;
 
     const dueCount = hasMounted && problems ? buildDailyQueue(problems, today).length : 0;
     const totalCount = hasMounted ? (problems?.length ?? 0) : 0;
 
-    const displayDueCount = hasError || isLoading ? '--' : String(dueCount).padStart(2, '0');
-    const displayTotalCount = hasError || isLoading ? '--' : String(totalCount).padStart(2, '0');
+    const displayDueCount =
+        hasError || isLoading || isUnauthenticated ? '--' : String(dueCount).padStart(2, '0');
+    const displayTotalCount =
+        hasError || isLoading || isUnauthenticated ? '--' : String(totalCount).padStart(2, '0');
 
     return (
         <>
@@ -85,7 +88,7 @@ export function Navbar() {
                         to="/review"
                         label="review"
                         exact
-                        badge={hasError || isLoading ? undefined : dueCount}
+                        badge={hasError || isLoading || isUnauthenticated ? undefined : dueCount}
                     />
                     <BottomTab to="/library" label="library" />
                 </div>
