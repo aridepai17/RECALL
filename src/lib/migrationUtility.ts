@@ -12,17 +12,16 @@
 
 import { z } from 'zod';
 import { supabase } from './supabaseClient';
-import { PATTERNS } from './recalldata';
+import { PATTERNS, sanitizeUrl } from './recalldata';
 import { EASE_MIN, EASE_MAX, GRADES } from './srs';
 import type { Database } from './database.types';
 
 const PROBLEMS_KEY = 'recall:problems';
 const HISTORY_KEY = 'recall:history';
+const MIGRATION_OWNER_KEY = 'recall:migration-owner';
+const CHUNK_SIZE = 500;
 
-// Helper to generate a deterministic UUID v5 from a legacy non-UUID string
-// This guarantees that running the migration multiple times yields the exact same IDs
 async function toDeterministicUUID(name: string): Promise<string> {
-    // ISO Namespace UUID for custom object generation: 6ba7b811-9dad-11d1-80b4-00c04fd430c8
     const namespaceBytes = new Uint8Array([
         0x6b, 0xa7, 0xb8, 0x11, 0x9d, 0xad, 0x11, 0xd1, 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30,
         0xc8,
@@ -31,24 +30,52 @@ async function toDeterministicUUID(name: string): Promise<string> {
     const totalBytes = new Uint8Array(namespaceBytes.length + nameBytes.length);
     totalBytes.set(namespaceBytes);
     totalBytes.set(nameBytes, namespaceBytes.length);
-
-    // Compute SHA-1 hash (Standard for UUID v5)
     const hashBuffer = await crypto.subtle.digest('SHA-1', totalBytes);
     const hashBytes = new Uint8Array(hashBuffer);
-
-    // Set version (5) and variant bits
     hashBytes[6] = (hashBytes[6] & 0x0f) | 0x50;
     hashBytes[8] = (hashBytes[8] & 0x3f) | 0x80;
-
-    // Format into standard canonical string UUID
     const hex = Array.from(hashBytes)
-        .map((b) => b.toString(16).padStart(2, '0'))
+        .map((byte) => byte.toString(16).padStart(2, '0'))
         .join('');
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const CHUNK_SIZE = 500;
+async function assertSameSession(expectedUserId: string): Promise<void> {
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+    if (!user || user.id !== expectedUserId) {
+        throw new Error('Session changed during migration; aborting');
+    }
+}
+
+async function claimMigrationOwnership(userId: string): Promise<boolean> {
+    const attemptClaim = async (): Promise<boolean> => {
+        const existingOwner = window.localStorage.getItem(MIGRATION_OWNER_KEY);
+        if (existingOwner && existingOwner !== userId) {
+            return false;
+        }
+        window.localStorage.setItem(MIGRATION_OWNER_KEY, userId);
+        const claimedOwner = window.localStorage.getItem(MIGRATION_OWNER_KEY);
+        return claimedOwner === userId;
+    };
+
+    if (navigator.locks?.request) {
+        try {
+            return await navigator.locks.request(
+                'recall-migration',
+                { mode: 'exclusive' },
+                async () => {
+                    return attemptClaim();
+                },
+            );
+        } catch {
+            return false;
+        }
+    }
+
+    return false;
+}
 
 const LegacyProblemSchema = z.object({
     id: z.string(),
@@ -81,8 +108,9 @@ type ProblemPattern = Database['public']['Enums']['problem_pattern'];
 type ProblemInsert = Database['public']['Tables']['problems']['Insert'];
 type HistoryInsert = Database['public']['Tables']['problem_history']['Insert'];
 
-interface ResolvedProblemInsert extends Omit<ProblemInsert, 'id'> {
+interface ResolvedProblemInsert extends Omit<ProblemInsert, 'id' | 'user_id'> {
     id: string;
+    user_id: string;
 }
 interface ResolvedHistoryInsert extends Omit<HistoryInsert, 'id' | 'problem_id'> {
     id: string;
@@ -100,7 +128,8 @@ function isValidPattern(value: string): value is ProblemPattern {
 
 const VALID_GRADES = new Set<number>(GRADES);
 
-export type MigrationStage = 'extraction' | 'problems_upsert' | 'history_upsert';
+export type MigrationStage =
+    'extraction' | 'problems_upsert' | 'history_upsert' | 'ownership_claim';
 
 export interface MigrationError {
     stage: MigrationStage;
@@ -177,6 +206,7 @@ function readLegacyList<T>(key: string, schema: z.ZodType<T>, errors: MigrationE
 
 async function toProblemInsert(
     legacy: LegacyProblem,
+    userId: string,
     errors: MigrationError[],
 ): Promise<ResolvedProblem | null> {
     if (!isValidPattern(legacy.pattern)) {
@@ -188,17 +218,16 @@ async function toProblemInsert(
         return null;
     }
 
-    const resolvedId = UUID_RE.test(legacy.id)
-        ? legacy.id
-        : await toDeterministicUUID(`problem:${legacy.id}`);
+    const resolvedId = await toDeterministicUUID(`problem:${legacy.id}:${userId}`);
 
     return {
         legacyId: legacy.id,
         insert: {
             id: resolvedId,
+            user_id: userId,
             name: legacy.name.trim(),
             pattern: legacy.pattern,
-            url: legacy.url,
+            url: sanitizeUrl(legacy.url),
             due_date: legacy.due_date,
             interval_days: Math.max(0, Math.min(365, Math.trunc(legacy.interval_days))),
             ease_factor: Number.isFinite(legacy.ease_factor)
@@ -215,6 +244,7 @@ async function toProblemInsert(
 
 async function toHistoryInsert(
     legacy: LegacyHistoryEntry,
+    userId: string,
     idRemap: ReadonlyMap<string, string>,
     migratedProblemIds: ReadonlySet<string>,
     errors: MigrationError[],
@@ -240,7 +270,7 @@ async function toHistoryInsert(
     }
 
     return {
-        id: UUID_RE.test(legacy.id) ? legacy.id : await toDeterministicUUID(`history:${legacy.id}`),
+        id: await toDeterministicUUID(`history:${legacy.id}:${userId}`),
         problem_id: resolvedProblemId,
         grade: legacy.grade,
         interval_days: Math.max(0, Math.min(365, Math.trunc(legacy.interval_days))),
@@ -362,11 +392,70 @@ async function upsertHistoryChunked(
     return migrated;
 }
 
-export async function runLocalStorageMigration(): Promise<MigrationResult> {
+export async function runLocalStorageMigration(userId?: string): Promise<MigrationResult> {
     const errors: MigrationError[] = [];
+
+    let resolvedUserId = userId;
+    if (!resolvedUserId) {
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) {
+            return {
+                status: 'failed',
+                problemsTotal: 0,
+                problemsMigrated: 0,
+                historyTotal: 0,
+                historyMigrated: 0,
+                errors: [
+                    {
+                        stage: 'extraction',
+                        message:
+                            'User not authenticated. Migration requires authentication to assign user_id to migrated records.',
+                    },
+                ],
+            };
+        }
+        resolvedUserId = user.id;
+    }
 
     const legacyProblems = readLegacyList(PROBLEMS_KEY, LegacyProblemSchema, errors);
     const legacyHistory = readLegacyList(HISTORY_KEY, LegacyHistoryEntrySchema, errors);
+
+    // Check if localStorage data has already been migrated to prevent cross-account data exposure.
+    // The legacy payload is browser-wide, so a single global owner marker is used instead of
+    // namespacing by user ID. Once migrated, other accounts on the same browser cannot re-migrate
+    // the same records under a different user_id.
+    if (typeof window !== 'undefined' && (legacyProblems.length > 0 || legacyHistory.length > 0)) {
+        const existingOwner = window.localStorage.getItem(MIGRATION_OWNER_KEY);
+        if (existingOwner && existingOwner !== resolvedUserId) {
+            return {
+                status: 'empty',
+                problemsTotal: 0,
+                problemsMigrated: 0,
+                historyTotal: 0,
+                historyMigrated: 0,
+                errors: [],
+            };
+        }
+
+        const claimed = await claimMigrationOwnership(resolvedUserId);
+        if (!claimed) {
+            return {
+                status: 'failed',
+                problemsTotal: 0,
+                problemsMigrated: 0,
+                historyTotal: 0,
+                historyMigrated: 0,
+                errors: [
+                    {
+                        stage: 'ownership_claim',
+                        message: 'Failed to claim migration ownership in localStorage',
+                    },
+                ],
+            };
+        }
+    }
 
     if (legacyProblems.length === 0 && legacyHistory.length === 0) {
         return {
@@ -381,7 +470,9 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
 
     const resolved = (
         await Promise.all(
-            legacyProblems.map(async (legacy) => await toProblemInsert(legacy, errors)),
+            legacyProblems.map(
+                async (legacy) => await toProblemInsert(legacy, resolvedUserId, errors),
+            ),
         )
     ).filter((r): r is ResolvedProblem => r !== null);
 
@@ -393,14 +484,24 @@ export async function runLocalStorageMigration(): Promise<MigrationResult> {
 
     const migratedProblemIds = await upsertProblemsChunked(resolvedProblems, errors);
 
+    await assertSameSession(resolvedUserId);
+
     const resolvedHistory = (
         await Promise.all(
             legacyHistory.map(
                 async (legacy) =>
-                    await toHistoryInsert(legacy, idRemap, migratedProblemIds, errors),
+                    await toHistoryInsert(
+                        legacy,
+                        resolvedUserId,
+                        idRemap,
+                        migratedProblemIds,
+                        errors,
+                    ),
             ),
         )
     ).filter((r): r is ResolvedHistoryInsert => r !== null);
+
+    await assertSameSession(resolvedUserId);
 
     const historyMigrated = await upsertHistoryChunked(resolvedHistory, errors);
 

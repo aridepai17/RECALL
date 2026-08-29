@@ -3,7 +3,7 @@ import { motion, useMotionTemplate, useMotionValue } from 'motion/react';
 import { Terminal, Gauge, TrendingDown, Archive } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { scheduleNextReview, buildDailyQueue, todayISO, type Grade } from '@/lib/srs';
-import { problemsQuery } from '@/lib/recalldata';
+import { getCurrentUserId, problemsQuery } from '@/lib/recalldata';
 import { cn } from '@/lib/utils';
 
 function SpotlightCard({
@@ -129,7 +129,7 @@ function FrictionSwitch({ friction }: { friction: FrictionItem[] }) {
                         onPointerLeave={() => setActive(null)}
                         onBlur={() => setActive(null)}
                         className={cn(
-                            'metric h-10 min-h-[44px] rounded-md text-[13px] tabular-nums ring-1 transition-all duration-150 ease-out',
+                            'metric h-10 min-h-11 rounded-md text-[13px] tabular-nums ring-1 transition-all duration-150 ease-out',
                             active === index
                                 ? cn(grade.cls, '-translate-y-0.5')
                                 : 'bg-white/[0.04] text-muted-foreground ring-border',
@@ -333,8 +333,37 @@ function ArchiveTimeline() {
 }
 
 export function DashboardMechanics() {
-    const { data: problems = [] } = useQuery(problemsQuery);
+    const {
+        data: userId,
+        isError: userIdError,
+        error: userIdQueryError,
+    } = useQuery({
+        queryKey: ['currentUser'],
+        queryFn: getCurrentUserId,
+    });
+    const {
+        data: problems = [],
+        isError,
+        error,
+    } = useQuery({
+        ...problemsQuery(userId ?? 'none'),
+        enabled: !!userId,
+    });
     const today = todayISO();
+
+    const hasError = userIdError || isError;
+
+    const mechanicsErrorMessage = (() => {
+        if (userIdError && userIdQueryError instanceof Error) {
+            console.error('[DashboardMechanics] currentUser query failed:', userIdQueryError);
+            return 'Something went wrong. Please try again later.';
+        }
+        if (isError && error instanceof Error) {
+            console.error('[DashboardMechanics] problems query failed:', error);
+            return 'Something went wrong. Please try again later.';
+        }
+        return 'Unknown error';
+    })();
 
     // Pull the real queue and grab the first due problem
     const queue = useMemo(() => buildDailyQueue(problems, today), [problems, today]);
@@ -396,6 +425,11 @@ export function DashboardMechanics() {
 
     return (
         <section aria-label="System mechanics">
+            {hasError && (
+                <div className="rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
+                    Couldn&apos;t load mechanics preview. {mechanicsErrorMessage}
+                </div>
+            )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
                 <SpotlightCard
                     index="01"

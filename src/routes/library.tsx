@@ -4,17 +4,25 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { ExternalLink, Search } from 'lucide-react';
 import { FilterSelect, Sparkline } from '@/components';
-import { historyQuery, problemsQuery } from '@/lib/recalldata';
+import { getCurrentUserId, historyQuery, problemsQuery } from '@/lib/recalldata';
 import { formatDue, healthOf, todayISO, type Problem } from '@/lib/srs';
 import type { QueryClient } from '@tanstack/react-query';
 
 export const Route = createFileRoute('/library')({
     loader: async ({ context }) => {
         const queryClient = (context as { queryClient: QueryClient }).queryClient;
-        await Promise.all([
-            queryClient.ensureQueryData(problemsQuery),
-            queryClient.ensureQueryData(historyQuery),
-        ]);
+        try {
+            const userId = await getCurrentUserId();
+            if (!userId) return;
+            await Promise.all([
+                queryClient.ensureQueryData(problemsQuery(userId)),
+                queryClient.ensureQueryData(historyQuery(userId)),
+            ]);
+        } catch (error) {
+            // Allow errors to be handled by component-level error panels
+            // Prevent them from escaping to root ErrorComponent
+            console.error('[library loader] Query prefetch failed:', error);
+        }
     },
     head: () => ({
         meta: [
@@ -50,8 +58,33 @@ function healthToClass(health: 'healthy' | 'lapsed' | 'neutral'): string {
 
 function Library() {
     const today = useMemo(() => todayISO(), []);
-    const { data: problems, isPending } = useQuery(problemsQuery);
-    const { data: history, isPending: historyPending } = useQuery(historyQuery);
+    const {
+        data: userId,
+        isPending: userIdPending,
+        isError: userIdError,
+        error: userIdQueryError,
+    } = useQuery({
+        queryKey: ['currentUser'],
+        queryFn: getCurrentUserId,
+    });
+    const {
+        data: problems,
+        isPending,
+        isError: problemsErrored,
+        error: problemsError,
+    } = useQuery({
+        ...problemsQuery(userId ?? 'none'),
+        enabled: !!userId,
+    });
+    const {
+        data: history,
+        isPending: historyPending,
+        isError: historyErrored,
+        error: historyError,
+    } = useQuery({
+        ...historyQuery(userId ?? 'none'),
+        enabled: !!userId,
+    });
 
     const [search, setSearch] = useState('');
     const [pattern, setPattern] = useState('all');
@@ -97,7 +130,22 @@ function Library() {
         return [...filtered].sort(compare);
     }, [problems, search, pattern, sort]);
 
-    const loading = isPending || historyPending;
+    const loading = userIdPending || (!!userId && (isPending || historyPending));
+    const loadError = userIdError
+        ? userIdQueryError
+        : problemsErrored
+          ? problemsError
+          : historyErrored
+            ? historyError
+            : null;
+
+    const loadErrorMessage = (() => {
+        if (loadError instanceof Error) {
+            console.error('[library] query failed:', loadError);
+            return 'Something went wrong. Please try again later.';
+        }
+        return 'Unknown error';
+    })();
 
     return (
         <main className="relative min-h-screen">
@@ -152,19 +200,25 @@ function Library() {
                     )}
                 </div>
 
-                {loading && (
+                {loading && !loadError && (
                     <div className="mt-4 metric py-8 text-[0.75rem] text-muted-foreground">
                         loading…
                     </div>
                 )}
 
-                {!loading && rows.length === 0 && (
+                {loadError && (
+                    <div className="mt-4 metric rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
+                        Couldn&apos;t load the library. {loadErrorMessage}
+                    </div>
+                )}
+
+                {!loading && !loadError && rows.length === 0 && (
                     <div className="mt-4 metric py-8 text-[0.75rem] text-muted-foreground">
                         no matches
                     </div>
                 )}
 
-                {!loading && rows.length > 0 && (
+                {!loading && !loadError && rows.length > 0 && (
                     <div className="flex flex-col mt-6">
                         {/* Mobile Cards */}
                         <div className="flex flex-col gap-3 md:hidden">

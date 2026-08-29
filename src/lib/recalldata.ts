@@ -1,152 +1,21 @@
-import { z } from 'zod';
 import { type Grade, type HistoryEntry, type Problem, type ScheduleResult, todayISO } from './srs';
+import { supabase } from './supabaseClient';
+import type { Database } from './database.types';
 
-const PROBLEMS_KEY = 'recall:problems';
-const HISTORY_KEY = 'recall:history';
-
-const isBrowser = typeof window !== 'undefined';
-
-const ProblemSchema = z.object({
-    id: z.string(),
-    name: z.string(),
-    pattern: z.string(),
-    url: z.string().nullable(),
-    due_date: z.string(),
-    interval_days: z.number(),
-    ease_factor: z.number(),
-    reps: z.number(),
-    lapses: z.number(),
-    archived: z.boolean(),
-    created_at: z.string(),
-    updated_at: z.string(),
-});
-
-const HistoryEntrySchema = z.object({
-    id: z.string(),
-    problem_id: z.string(),
-    grade: z.number(),
-    interval_days: z.number(),
-    ease_factor: z.number(),
-    reviewed_on: z.string(),
-    created_at: z.string(),
-});
-
-function readList<T>(key: string, schema: z.ZodType<T>): T[] {
-    if (!isBrowser) return [];
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return [];
+export function sanitizeUrl(raw: string | null | undefined): string | null {
+    if (!raw?.trim()) return null;
+    const trimmed = raw.trim();
     try {
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) throw new Error('not an array');
-        return parsed.map((row) => schema.parse(row));
-    } catch {
-        window.localStorage.removeItem(key);
-        return [];
-    }
-}
-
-function writeList<T>(key: string, list: T[]): void {
-    if (!isBrowser) return;
-    window.localStorage.setItem(key, JSON.stringify(list));
-}
-
-function newId(): string {
-    return isBrowser && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-export const problemsQuery = {
-    queryKey: ['problems'] as const,
-    queryFn: async (): Promise<Problem[]> => readList(PROBLEMS_KEY, ProblemSchema),
-};
-
-export async function loadProblems(): Promise<Problem[]> {
-    return readList(PROBLEMS_KEY, ProblemSchema);
-}
-
-export const historyQuery = {
-    queryKey: ['problem_history'] as const,
-    queryFn: async (): Promise<HistoryEntry[]> => readList(HISTORY_KEY, HistoryEntrySchema),
-};
-
-export async function commitReview(
-    problem: Pick<Problem, 'id'>,
-    grade: Grade,
-    next: ScheduleResult,
-    reviewedOn: string,
-): Promise<void> {
-    const problems = readList(PROBLEMS_KEY, ProblemSchema);
-    const idx = problems.findIndex((p) => p.id === problem.id);
-    if (idx === -1) throw new Error(`commitReview: problem ${problem.id} not found`);
-
-    const history = readList(HISTORY_KEY, HistoryEntrySchema);
-
-    const updatedHistory = [
-        ...history,
-        {
-            id: newId(),
-            problem_id: problem.id,
-            grade,
-            interval_days: next.interval_days,
-            ease_factor: next.ease_factor,
-            reviewed_on: reviewedOn,
-            created_at: new Date().toISOString(),
-        },
-    ];
-
-    const updatedProblems = [...problems];
-    updatedProblems[idx] = {
-        ...updatedProblems[idx]!,
-        interval_days: next.interval_days,
-        ease_factor: next.ease_factor,
-        reps: next.reps,
-        lapses: next.lapses,
-        due_date: next.due_date,
-        archived: next.archived,
-        updated_at: new Date().toISOString(),
-    };
-
-    const previousHistory = window.localStorage.getItem(HISTORY_KEY);
-
-    try {
-        writeList(HISTORY_KEY, updatedHistory);
-        writeList(PROBLEMS_KEY, updatedProblems);
-    } catch (error) {
-        if (previousHistory === null) {
-            window.localStorage.removeItem(HISTORY_KEY);
-        } else {
-            window.localStorage.setItem(HISTORY_KEY, previousHistory);
+        const url = new URL(trimmed);
+        const protocol = url.protocol.toLowerCase();
+        if (protocol === 'javascript:' || protocol === 'data:' || protocol === 'vbscript:') {
+            return null;
         }
-
-        throw error;
+        return url.toString();
+    } catch {
+        // Not an absolute URL — preserve as-is for backward compatibility
+        return trimmed;
     }
-}
-
-export async function addProblem(input: {
-    name: string;
-    pattern: string;
-    url?: string | null;
-}): Promise<Problem> {
-    const now = new Date().toISOString();
-    const problem: Problem = {
-        id: newId(),
-        name: input.name.trim(),
-        pattern: input.pattern.trim(),
-        url: input.url?.trim() ? input.url.trim() : null,
-        due_date: todayISO(),
-        interval_days: 0,
-        ease_factor: 2.5,
-        reps: 0,
-        lapses: 0,
-        archived: false,
-        created_at: now,
-        updated_at: now,
-    };
-    const problems = readList(PROBLEMS_KEY, ProblemSchema);
-    problems.push(problem);
-    writeList(PROBLEMS_KEY, problems);
-    return problem;
 }
 
 export const PATTERNS = [
@@ -167,3 +36,176 @@ export const PATTERNS = [
     'Bit Manipulation',
     'Math & Geometry',
 ] as const;
+
+export async function getCurrentUserId(): Promise<string | null> {
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+    return user?.id ?? null;
+}
+
+type ProblemPattern = Database['public']['Enums']['problem_pattern'];
+type ProblemRow = Database['public']['Tables']['problems']['Row'];
+type ProblemInsertPayload = Database['public']['Tables']['problems']['Insert'];
+type HistoryRow = Database['public']['Tables']['problem_history']['Row'];
+
+const VALID_PATTERNS = new Set<string>(PATTERNS);
+function isValidPattern(value: string): value is ProblemPattern {
+    return VALID_PATTERNS.has(value);
+}
+
+function toGrade(value: number): Grade {
+    if (value === 0 || value === 1 || value === 2 || value === 3) return value;
+    throw new Error(`recalldata: unexpected grade value from database: ${value}`);
+}
+
+function rowToProblem(row: ProblemRow): Problem {
+    return {
+        id: row.id,
+        name: row.name,
+        pattern: row.pattern,
+        url: row.url,
+        due_date: row.due_date,
+        interval_days: row.interval_days,
+        ease_factor: row.ease_factor,
+        reps: row.reps,
+        lapses: row.lapses,
+        archived: row.archived,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    };
+}
+
+function rowToHistoryEntry(row: HistoryRow): HistoryEntry {
+    return {
+        id: row.id,
+        problem_id: row.problem_id,
+        grade: toGrade(row.grade),
+        interval_days: row.interval_days,
+        ease_factor: row.ease_factor,
+        reviewed_on: row.reviewed_on,
+        created_at: row.created_at,
+    };
+}
+
+async function fetchProblems(userId: string): Promise<Problem[]> {
+    const { data, error } = await supabase
+        .from('problems')
+        .select()
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
+
+    if (error) {
+        throw new Error(`problemsQuery: failed to load problems: ${error.message}`);
+    }
+    return (data ?? []).map(rowToProblem);
+}
+
+async function fetchHistory(userId: string): Promise<HistoryEntry[]> {
+    const { data, error } = await supabase
+        .from('problem_history')
+        .select('*,problems!inner(user_id)')
+        .eq('problems.user_id', userId)
+        .order('created_at', { ascending: true });
+
+    if (error) {
+        throw new Error(`historyQuery: failed to load review history: ${error.message}`);
+    }
+    return (data ?? []).map(rowToHistoryEntry);
+}
+
+export function problemsQuery(userId: string) {
+    return {
+        queryKey: ['problems', userId] as const,
+        queryFn: () => fetchProblems(userId),
+    };
+}
+
+export async function loadProblems(): Promise<Problem[]> {
+    const userId = await getCurrentUserId();
+    if (!userId) return [];
+    return fetchProblems(userId);
+}
+
+export function historyQuery(userId: string) {
+    return {
+        queryKey: ['problem_history', userId] as const,
+        queryFn: () => fetchHistory(userId),
+    };
+}
+
+export async function addProblem(input: {
+    name: string;
+    pattern: string;
+    url?: string | null;
+}): Promise<Problem> {
+    const trimmedName = input.name.trim();
+    if (trimmedName.length === 0) {
+        throw new Error('addProblem: name cannot be empty or whitespace-only.');
+    }
+
+    if (!isValidPattern(input.pattern)) {
+        throw new Error(`addProblem: "${input.pattern}" is not a recognized pattern.`);
+    }
+
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+        throw new Error('addProblem: user not authenticated');
+    }
+
+    const now = new Date().toISOString();
+    const insert: ProblemInsertPayload = {
+        id: crypto.randomUUID(),
+        user_id: user.id,
+        name: trimmedName,
+        pattern: input.pattern,
+        url: sanitizeUrl(input.url),
+        due_date: todayISO(),
+        interval_days: 0,
+        ease_factor: 2.5,
+        reps: 0,
+        lapses: 0,
+        archived: false,
+        created_at: now,
+        updated_at: now,
+    };
+
+    const { data, error } = await supabase.from('problems').insert(insert).select().single();
+
+    if (error) {
+        throw new Error(`addProblem: insert failed: ${error.message}`);
+    }
+    if (!data) {
+        throw new Error('addProblem: insert returned no data.');
+    }
+
+    return rowToProblem(data);
+}
+
+export async function commitReview(
+    problem: Problem,
+    grade: Grade,
+    next: ScheduleResult,
+    reviewedOn: string,
+): Promise<void> {
+    const { error } = await supabase.rpc('commit_review', {
+        p_problem_id: problem.id,
+        p_interval_days: next.interval_days,
+        p_ease_factor: next.ease_factor,
+        p_reps: next.reps,
+        p_lapses: next.lapses,
+        p_due_date: next.due_date,
+        p_archived: next.archived,
+        p_expected_updated_at: problem.updated_at,
+        p_grade: grade,
+        p_reviewed_on: reviewedOn,
+    });
+
+    if (error) {
+        throw new Error(
+            `commitReview: failed to commit review for problem ${problem.id}: ${error.message}`,
+        );
+    }
+}

@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { QueryClient } from '@tanstack/react-query';
 import type { Database } from './database.types';
 
 function requireEnv(value: string | undefined, name: string): string {
@@ -22,3 +23,28 @@ export const supabase: SupabaseClient<Database> = createClient<Database>(
     supabaseUrl,
     supabaseAnonKey,
 );
+
+let authStateListener: { data: { subscription: { unsubscribe: () => void } } } | null = null;
+
+export function setupAuthStateChangeHandler(
+    queryClient: QueryClient,
+    onSignIn?: (queryClient: QueryClient) => void,
+) {
+    if (authStateListener) {
+        authStateListener.data.subscription.unsubscribe();
+    }
+
+    authStateListener = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+            // Set currentUser query data to session.user.id or null
+            queryClient.setQueryData(['currentUser'], session?.user.id ?? null);
+            // Remove user-scoped queries instead of invalidating them
+            queryClient.removeQueries({ queryKey: ['problems'] });
+            queryClient.removeQueries({ queryKey: ['problem_history'] });
+        }
+
+        if (event === 'SIGNED_IN' && session?.user) {
+            setTimeout(() => onSignIn?.(queryClient), 0);
+        }
+    });
+}

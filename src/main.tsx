@@ -2,6 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider } from '@tanstack/react-router';
 import { getRouter } from './router';
+import { ensureMigrated } from './lib/migrationBootstrap';
+import { setupAuthStateChangeHandler } from './lib/supabaseClient';
 import './styles.css';
 
 const rootElement = document.getElementById('root');
@@ -11,6 +13,10 @@ if (!rootElement) {
 }
 
 const router = getRouter();
+
+// Setup auth state change handler to clear user-scoped caches on sign in/out
+// and retry migration when a user signs in after initial load
+setupAuthStateChangeHandler(router.options.context.queryClient, ensureMigrated);
 
 class ErrorBoundary extends React.Component<
     { children: React.ReactNode },
@@ -72,6 +78,7 @@ if (import.meta.env.DEV) {
 
 const root = ReactDOM.createRoot(rootElement);
 
+// Render app immediately without blocking on migration
 if (import.meta.env.DEV) {
     root.render(
         <React.StrictMode>
@@ -87,3 +94,7 @@ if (import.meta.env.DEV) {
         </ErrorBoundary>,
     );
 }
+
+// Run migration in background without blocking initial render
+// Pass queryClient to invalidate cached queries after migration completes
+void ensureMigrated(router.options.context.queryClient);

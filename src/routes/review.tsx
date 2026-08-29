@@ -3,7 +3,13 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useState, type SubmitEvent } from 'react';
-import { PATTERNS, addProblem, commitReview, problemsQuery } from '@/lib/recalldata';
+import {
+    PATTERNS,
+    addProblem,
+    commitReview,
+    getCurrentUserId,
+    problemsQuery,
+} from '@/lib/recalldata';
 import {
     GRADES,
     GRADE_HINTS,
@@ -21,7 +27,16 @@ import type { QueryClient } from '@tanstack/react-query';
 export const Route = createFileRoute('/review')({
     loader: async ({ context }) => {
         const queryClient = (context as { queryClient: QueryClient }).queryClient;
-        return await queryClient.ensureQueryData(problemsQuery);
+        try {
+            const userId = await getCurrentUserId();
+            if (!userId) return null;
+            return await queryClient.ensureQueryData(problemsQuery(userId));
+        } catch (error) {
+            // Allow errors to be handled by component-level error panels
+            // Prevent them from escaping to root ErrorComponent
+            console.error('[review loader] Query prefetch failed:', error);
+            return null;
+        }
     },
     head: () => ({
         meta: [
@@ -46,12 +61,36 @@ const TRANSITION = { duration: 0.15, ease: [0.16, 1, 0.3, 1] as const };
 function ReviewEngine() {
     const [today, setToday] = useState(() => todayISO());
     const queryClient = useQueryClient();
-    const { data: problems, isPending } = useQuery(problemsQuery);
+    const {
+        data: userId,
+        isPending: userIdPending,
+        isError: userIdError,
+        error: userIdQueryError,
+    } = useQuery({
+        queryKey: ['currentUser'],
+        queryFn: getCurrentUserId,
+    });
+    const {
+        data: problems,
+        isPending,
+        isError: queueErrored,
+        error: queueError,
+    } = useQuery({
+        ...problemsQuery(userId ?? 'none'),
+        enabled: !!userId,
+    });
 
     const [graded, setGraded] = useState<Set<string>>(() => new Set());
     const [revealed, setRevealed] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sessionSize, setSessionSize] = useState<number | null>(null);
+
+    useEffect(() => {
+        setGraded(new Set());
+        setRevealed(false);
+        setSessionSize(null);
+        setError(null);
+    }, [userId]);
 
     // Keep 'today' fresh exactly at midnight, on focus, and check frequently for drift
     useEffect(() => {
@@ -112,6 +151,16 @@ function ReviewEngine() {
     const current = queue[0];
     const completedCount = sessionSize !== null ? sessionSize - queue.length : 0;
 
+    const loadError = userIdError ? userIdQueryError : queueErrored ? queueError : null;
+
+    const loadErrorMessage = (() => {
+        if (loadError instanceof Error) {
+            console.error('[review] query failed:', loadError);
+            return 'Something went wrong. Please try again later.';
+        }
+        return 'Unknown error';
+    })();
+
     const commitMutation = useMutation({
         mutationFn: async ({ problem, gradeValue }: { problem: Problem; gradeValue: Grade }) => {
             const activeToday = todayISO();
@@ -137,8 +186,10 @@ function ReviewEngine() {
             );
         },
         onSettled: () => {
-            void queryClient.invalidateQueries({ queryKey: problemsQuery.queryKey });
-            void queryClient.invalidateQueries({ queryKey: ['problem_history'] });
+            if (userId) {
+                void queryClient.invalidateQueries({ queryKey: ['problems', userId] });
+                void queryClient.invalidateQueries({ queryKey: ['problem_history', userId] });
+            }
         },
     });
 
@@ -185,7 +236,11 @@ function ReviewEngine() {
                     </div>
                 )}
 
-                {isPending ? (
+                {loadError ? (
+                    <div className="w-full max-w-xl rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
+                        Couldn&apos;t load today&apos;s queue. {loadErrorMessage}
+                    </div>
+                ) : userIdPending || (!!userId && isPending) ? (
                     <span className="metric text-[0.75rem] text-muted-foreground">
                         loading queue…
                     </span>
@@ -244,7 +299,7 @@ function ReviewEngine() {
                                                 <button
                                                     key={g}
                                                     onClick={() => grade(g)}
-                                                    className="metric group flex min-h-[44px] items-center gap-4 rounded-md px-3 py-3 text-left ring-1 ring-border transition-colors duration-150 ease-out hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                                    className="metric group flex min-h-11 items-center gap-4 rounded-md px-3 py-3 text-left ring-1 ring-border transition-colors duration-150 ease-out hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                                 >
                                                     <kbd className="kbd-chip">{g}</kbd>
                                                     <span
@@ -269,7 +324,7 @@ function ReviewEngine() {
                                     ) : (
                                         <button
                                             onClick={() => setRevealed(true)}
-                                            className="metric flex min-h-[44px] w-full items-center justify-between rounded-md px-3 py-3 ring-1 ring-border transition-colors duration-150 ease-out hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                            className="metric flex min-h-11 w-full items-center justify-between rounded-md px-3 py-3 ring-1 ring-border transition-colors duration-150 ease-out hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                         >
                                             <span className="text-sm text-muted-foreground">
                                                 Reconstruct the solution, then grade the friction
@@ -281,8 +336,12 @@ function ReviewEngine() {
                             </motion.section>
                         </AnimatePresence>
                     </>
-                ) : (
+                ) : userId ? (
                     <QueueClear />
+                ) : (
+                    <div className="w-full max-w-xl rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
+                        Please sign in to add problems.
+                    </div>
                 )}
             </div>
         </main>
@@ -291,6 +350,10 @@ function ReviewEngine() {
 
 function QueueClear() {
     const queryClient = useQueryClient();
+    const { data: userId } = useQuery({
+        queryKey: ['currentUser'],
+        queryFn: getCurrentUserId,
+    });
     const [name, setName] = useState('');
     const [pattern, setPattern] = useState<string>(PATTERNS[0]);
     const [url, setUrl] = useState('');
@@ -301,7 +364,9 @@ function QueueClear() {
         onSuccess: () => {
             setName('');
             setUrl('');
-            void queryClient.invalidateQueries({ queryKey: problemsQuery.queryKey });
+            if (userId) {
+                void queryClient.invalidateQueries({ queryKey: ['problems', userId] });
+            }
         },
     });
 

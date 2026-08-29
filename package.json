@@ -48,6 +48,7 @@
         "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
         "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
         "prepare": "husky",
+        "test": "bun test",
         "typecheck": "tsc --noEmit",
         "db:start": "supabase start",
         "db:stop": "supabase stop"
