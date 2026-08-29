@@ -9,9 +9,16 @@ import type { QueryClient } from '@tanstack/react-query';
 export const Route = createFileRoute('/')({
     loader: async ({ context }) => {
         const queryClient = (context as { queryClient: QueryClient }).queryClient;
-        const userId = await getCurrentUserId();
-        if (!userId) return null;
-        return await queryClient.ensureQueryData(problemsQuery(userId));
+        try {
+            const userId = await getCurrentUserId();
+            if (!userId) return null;
+            return await queryClient.ensureQueryData(problemsQuery(userId));
+        } catch (error) {
+            // Allow errors to be handled by component-level error panels
+            // Prevent them from escaping to root ErrorComponent
+            console.error('[dashboard loader] Query prefetch failed:', error);
+            return null;
+        }
     },
     head: () => ({
         meta: [
@@ -34,15 +41,16 @@ export const Route = createFileRoute('/')({
 
 function Dashboard() {
     const today = todayISO();
-    const { data: userId } = useQuery({
+    const { data: userId, isError: userIdError } = useQuery({
         queryKey: ['currentUser'],
         queryFn: getCurrentUserId,
     });
-    const { data: problems } = useQuery({
+    const { data: problems, isError: problemsError } = useQuery({
         ...problemsQuery(userId ?? 'none'),
         enabled: !!userId,
     });
-    const dueCount = problems ? buildDailyQueue(problems, today).length : 0;
+    const dueCount =
+        userIdError || problemsError ? '—' : problems ? buildDailyQueue(problems, today).length : 0;
 
     return (
         <main className="relative min-h-screen overflow-hidden">
@@ -68,7 +76,9 @@ function Dashboard() {
                         >
                             Start review
                             <span className="metric flex h-6 min-w-6 items-center justify-center rounded bg-primary-foreground/15 px-1.5 text-[0.75rem] tabular-nums">
-                                {String(dueCount).padStart(2, '0')}
+                                {typeof dueCount === 'number'
+                                    ? String(dueCount).padStart(2, '0')
+                                    : dueCount}
                             </span>
                         </Link>
                         <Link
