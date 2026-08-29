@@ -139,6 +139,14 @@ function Library() {
             ? historyError
             : null;
 
+    const loadErrorMessage = (() => {
+        if (loadError instanceof Error) {
+            console.error('[library] query failed:', loadError);
+            return 'Something went wrong. Please try again later.';
+        }
+        return 'Unknown error';
+    })();
+
     return (
         <main className="relative min-h-screen">
             <div className="blueprint-grid blueprint-fade pointer-events-none absolute inset-0 -z-10" />
@@ -200,8 +208,7 @@ function Library() {
 
                 {loadError && (
                     <div className="mt-4 metric rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
-                        Couldn&apos;t load the library.{' '}
-                        {loadError instanceof Error ? loadError.message : 'Unknown error'}
+                        Couldn&apos;t load the library. {loadErrorMessage}
                     </div>
                 )}
 
