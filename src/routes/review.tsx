@@ -153,6 +153,14 @@ function ReviewEngine() {
 
     const loadError = userIdError ? userIdQueryError : queueErrored ? queueError : null;
 
+    const loadErrorMessage = (() => {
+        if (loadError instanceof Error) {
+            console.error('[review] query failed:', loadError);
+            return 'Something went wrong. Please try again later.';
+        }
+        return 'Unknown error';
+    })();
+
     const commitMutation = useMutation({
         mutationFn: async ({ problem, gradeValue }: { problem: Problem; gradeValue: Grade }) => {
             const activeToday = todayISO();
@@ -230,8 +238,7 @@ function ReviewEngine() {
 
                 {loadError ? (
                     <div className="w-full max-w-xl rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
-                        Couldn&apos;t load today&apos;s queue.{' '}
-                        {loadError instanceof Error ? loadError.message : 'Unknown error'}
+                        Couldn&apos;t load today&apos;s queue. {loadErrorMessage}
                     </div>
                 ) : userIdPending || (!!userId && isPending) ? (
                     <span className="metric text-[0.75rem] text-muted-foreground">
