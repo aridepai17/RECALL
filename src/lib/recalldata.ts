@@ -7,13 +7,15 @@ export function sanitizeUrl(raw: string | null | undefined): string | null {
     const trimmed = raw.trim();
     try {
         const url = new URL(trimmed);
-        if (url.protocol === 'https:' || url.protocol === 'http:') {
-            return url.toString();
+        const protocol = url.protocol.toLowerCase();
+        if (protocol === 'javascript:' || protocol === 'data:' || protocol === 'vbscript:') {
+            return null;
         }
+        return url.toString();
     } catch {
-        // not a valid URL
+        // Not an absolute URL — preserve as-is for backward compatibility
+        return trimmed;
     }
-    return null;
 }
 
 export const PATTERNS = [
