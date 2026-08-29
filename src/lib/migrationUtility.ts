@@ -192,9 +192,7 @@ async function toProblemInsert(
         return null;
     }
 
-    const resolvedId = UUID_RE.test(legacy.id)
-        ? legacy.id
-        : await toDeterministicUUID(`problem:${legacy.id}`);
+    const resolvedId = await toDeterministicUUID(`problem:${legacy.id}:${userId}`);
 
     return {
         legacyId: legacy.id,
@@ -414,9 +412,22 @@ export async function runLocalStorageMigration(userId?: string): Promise<Migrati
             };
         }
 
-        // Claim ownership before starting migration to prevent race conditions
+        // Claim ownership with a compare-and-swap to reduce cross-tab race exposure.
+        // We write our user ID, then read it back; if another tab wrote first, the
+        // persisted value will differ and we abort the migration.
         try {
             window.localStorage.setItem(MIGRATION_OWNER_KEY, resolvedUserId);
+            const claimedOwner = window.localStorage.getItem(MIGRATION_OWNER_KEY);
+            if (claimedOwner !== resolvedUserId) {
+                return {
+                    status: 'empty',
+                    problemsTotal: 0,
+                    problemsMigrated: 0,
+                    historyTotal: 0,
+                    historyMigrated: 0,
+                    errors: [],
+                };
+            }
         } catch (error) {
             return {
                 status: 'failed',
