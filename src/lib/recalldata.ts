@@ -2,6 +2,20 @@ import { type Grade, type HistoryEntry, type Problem, type ScheduleResult, today
 import { supabase } from './supabaseClient';
 import type { Database } from './database.types';
 
+export function sanitizeUrl(raw: string | null | undefined): string | null {
+    if (!raw?.trim()) return null;
+    const trimmed = raw.trim();
+    try {
+        const url = new URL(trimmed);
+        if (url.protocol === 'https:' || url.protocol === 'http:') {
+            return url.toString();
+        }
+    } catch {
+        // not a valid URL
+    }
+    return null;
+}
+
 export const PATTERNS = [
     'Arrays & Hashing',
     'Two Pointers',
@@ -145,7 +159,7 @@ export async function addProblem(input: {
         user_id: user.id,
         name: trimmedName,
         pattern: input.pattern,
-        url: input.url?.trim() ? input.url.trim() : null,
+        url: sanitizeUrl(input.url),
         due_date: todayISO(),
         interval_days: 0,
         ease_factor: 2.5,

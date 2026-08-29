@@ -12,7 +12,7 @@
 
 import { z } from 'zod';
 import { supabase } from './supabaseClient';
-import { PATTERNS } from './recalldata';
+import { PATTERNS, sanitizeUrl } from './recalldata';
 import { EASE_MIN, EASE_MAX, GRADES } from './srs';
 import type { Database } from './database.types';
 
@@ -218,7 +218,7 @@ async function toProblemInsert(
             user_id: userId,
             name: legacy.name.trim(),
             pattern: legacy.pattern,
-            url: legacy.url,
+            url: sanitizeUrl(legacy.url),
             due_date: legacy.due_date,
             interval_days: Math.max(0, Math.min(365, Math.trunc(legacy.interval_days))),
             ease_factor: Number.isFinite(legacy.ease_factor)
