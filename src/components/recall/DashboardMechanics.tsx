@@ -353,6 +353,18 @@ export function DashboardMechanics() {
 
     const hasError = userIdError || isError;
 
+    const mechanicsErrorMessage = (() => {
+        if (userIdError && userIdQueryError instanceof Error) {
+            console.error('[DashboardMechanics] currentUser query failed:', userIdQueryError);
+            return 'Something went wrong. Please try again later.';
+        }
+        if (isError && error instanceof Error) {
+            console.error('[DashboardMechanics] problems query failed:', error);
+            return 'Something went wrong. Please try again later.';
+        }
+        return 'Unknown error';
+    })();
+
     // Pull the real queue and grab the first due problem
     const queue = useMemo(() => buildDailyQueue(problems, today), [problems, today]);
     const activeItem = queue[0];
@@ -415,12 +427,7 @@ export function DashboardMechanics() {
         <section aria-label="System mechanics">
             {hasError && (
                 <div className="rounded-md bg-lapsed/10 px-4 py-3 text-[0.8rem] text-lapsed ring-1 ring-lapsed/20">
-                    Couldn&apos;t load mechanics preview.{' '}
-                    {userIdError && userIdQueryError instanceof Error
-                        ? userIdQueryError.message
-                        : error instanceof Error
-                          ? error.message
-                          : 'Unknown error'}
+                    Couldn&apos;t load mechanics preview. {mechanicsErrorMessage}
                 </div>
             )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
