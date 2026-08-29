@@ -40,6 +40,15 @@ async function toDeterministicUUID(name: string): Promise<string> {
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+async function assertSameSession(expectedUserId: string): Promise<void> {
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+    if (!user || user.id !== expectedUserId) {
+        throw new Error('Session changed during migration; aborting');
+    }
+}
+
 async function claimMigrationOwnership(userId: string): Promise<boolean> {
     const attemptClaim = async (): Promise<boolean> => {
         const existingOwner = window.localStorage.getItem(MIGRATION_OWNER_KEY);
@@ -61,11 +70,11 @@ async function claimMigrationOwnership(userId: string): Promise<boolean> {
                 },
             );
         } catch {
-            return attemptClaim();
+            return false;
         }
     }
 
-    return attemptClaim();
+    return false;
 }
 
 const LegacyProblemSchema = z.object({
@@ -475,6 +484,8 @@ export async function runLocalStorageMigration(userId?: string): Promise<Migrati
 
     const migratedProblemIds = await upsertProblemsChunked(resolvedProblems, errors);
 
+    await assertSameSession(resolvedUserId);
+
     const resolvedHistory = (
         await Promise.all(
             legacyHistory.map(
@@ -489,6 +500,8 @@ export async function runLocalStorageMigration(userId?: string): Promise<Migrati
             ),
         )
     ).filter((r): r is ResolvedHistoryInsert => r !== null);
+
+    await assertSameSession(resolvedUserId);
 
     const historyMigrated = await upsertHistoryChunked(resolvedHistory, errors);
 
